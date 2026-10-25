@@ -23,6 +23,11 @@ interface Props {
   onEmboss(): void;
   onCoil(): void;
   onBox(): void;
+  onSketchMove(): void;
+  onSketchScale(): void;
+  onSketchRectPattern(): void;
+  onSketchAuto(): void;
+  onSketchInsert(kind: 'dxf' | 'svg'): void;
   onCylinder(): void;
   onSphere(): void;
   onTorus(): void;
@@ -157,8 +162,25 @@ export function Ribbon(p: Props) {
     T('ellipse', <Icon.tEllipse />, 'Ellipse', 'ellipse'),
     T('spline', <Icon.tSpline />, 'Fit Point Spline', 'spline'),
     T('point', <Icon.tPoint />, 'Point', 'point'),
+    { id: 'tool-insert-dxf', icon: <Icon.bImport />, label: 'Insert DXF…', tooltip: 'Put the shapes of a DXF file into this sketch', onClick: () => p.onSketchInsert('dxf') },
+    { id: 'tool-insert-svg', icon: <Icon.bImport />, label: 'Insert SVG…', tooltip: 'Put the shapes of an SVG file into this sketch', onClick: () => p.onSketchInsert('svg') },
   ];
 
+  const sketchModify: Cmd[] = [
+    T('trim', <Icon.trim />, 'Trim', 'trim', { pinned: true, keyHint: 'T' }),
+    T('extend', <Icon.extend />, 'Extend', 'extend', { pinned: true }),
+    T('offset', <Icon.offset />, 'Offset', 'offset', { pinned: true, keyHint: 'O' }),
+    T('fillet', <Icon.fillet />, 'Fillet', 'fillet', { pinned: true }),
+    T('chamfer', <Icon.bChamfer />, 'Chamfer', 'chamfer'),
+    T('break', <Icon.tBreak />, 'Break', 'break'),
+    { id: 'tool-smove', icon: <Icon.bMove />, label: 'Move / Copy', tooltip: 'Select curves first, then Move / Copy', onClick: p.onSketchMove },
+    { id: 'tool-sscale', icon: <Icon.bScale />, label: 'Scale', tooltip: 'Select curves first, then Scale', onClick: p.onSketchScale },
+  ];
+  const sketchPattern: Cmd[] = [
+    T('smirror', <Icon.mirror />, 'Mirror', 'smirror', { pinned: true, tooltip: 'Select curves first, then Mirror and click the line to mirror about' }),
+    T('scirc', <Icon.cpattern />, 'Circular Pattern', 'scirc', { tooltip: 'Select curves first, then click the centre point' }),
+    { id: 'tool-srect', icon: <Icon.rpattern />, label: 'Rectangular Pattern', tooltip: 'Select curves first, then Rectangular Pattern', onClick: p.onSketchRectPattern },
+  ];
   const shown = sketching ? 'solid' : tab;
   return (
     <div className="ribbon" data-testid="ribbon">
@@ -178,12 +200,8 @@ export function Ribbon(p: Props) {
         ) : (
           <>
             <CmdGroup title="CREATE" cmds={sketchCreate} open={open} setOpen={setOpen} />
-            <Group title="MODIFY">
-              <Btn id="tool-trim" icon={<Icon.trim />} label="Trim" keyHint="T" pressed={p.tool === 'trim'} onClick={() => p.onTool('trim')} />
-              <Btn id="tool-extend" icon={<Icon.extend />} label="Extend" pressed={p.tool === 'extend'} onClick={() => p.onTool('extend')} />
-              <Btn id="tool-offset" icon={<Icon.offset />} label="Offset" keyHint="O" pressed={p.tool === 'offset'} onClick={() => p.onTool('offset')} />
-              <Btn id="tool-fillet" icon={<Icon.fillet />} label="Fillet" pressed={p.tool === 'fillet'} onClick={() => p.onTool('fillet')} />
-            </Group>
+            <CmdGroup title="MODIFY" cmds={sketchModify} open={open} setOpen={setOpen} />
+            <CmdGroup title="PATTERN" cmds={sketchPattern} open={open} setOpen={setOpen} />
             <Group title="CONSTRAINTS">
               <div className="cgrid">
                 <Cbtn id="tool-horizontal" icon={<Icon.cHoriz />} label="Horizontal/Vertical" tool="horizontal" p={p} />
@@ -195,6 +213,9 @@ export function Ribbon(p: Props) {
                 <Cbtn id="tool-midpoint" icon={<Icon.cMid />} label="Midpoint" tool="midpoint" p={p} />
                 <Cbtn id="tool-concentric" icon={<Icon.cConc />} label="Concentric" tool="concentric" p={p} />
                 <Cbtn id="tool-fix" icon={<Icon.cFix />} label="Fix / Unfix" tool="fix" p={p} />
+                <Cbtn id="tool-collinear" icon={<Icon.cCollinear />} label="Collinear" tool="collinear" p={p} />
+                <Cbtn id="tool-symmetry" icon={<Icon.cSym />} label="Symmetry" tool="symmetry" p={p} />
+                <button className="cbtn" title="AutoConstrain: add the constraints and dimensions it can work out" aria-label="AutoConstrain" data-testid="tool-auto" onClick={p.onSketchAuto}><Icon.tAuto /></button>
               </div>
               <Btn id="tool-dimension" icon={<Icon.dimension />} label="Sketch Dimension" keyHint="D" pressed={p.tool === 'dimension'} onClick={() => p.onTool('dimension')} />
             </Group>

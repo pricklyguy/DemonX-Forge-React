@@ -94,6 +94,12 @@ const TOOL_HINT: Record<string, string[]> = {
   midpoint: ['Click a point or a line.', 'Click the other.'],
   concentric: ['Click the first circle or arc.', 'Click the second.'],
   fix: ['Click a point or curve to fix it (or release it).'],
+  collinear: ['Click the first line.', 'Click the second line.'],
+  symmetry: ['Click the first point (or curve).', 'Click the second.', 'Click the line they are symmetric about.'],
+  chamfer: ['Click a corner where two lines meet, then type the distance.'],
+  break: ['Click a line, arc or circle where it should be split.'],
+  smirror: ['With the curves selected, click the line to mirror about.'],
+  scirc: ['With the curves selected, click the point to turn them about, then type the count.'],
 };
 type ExtKind = 'extrude' | 'revolve' | 'sweep' | 'loft' | 'rib' | 'pipe' | 'emboss';
 type ModTool = 'fillet' | 'chamfer' | 'presspull' | 'shell' | 'offsetface' | 'draft' | 'hole' | 'thread' | 'mirror' | 'rpattern' | 'cpattern' | 'combine' | 'move' | 'split' | 'scale' | 'coil' | 'meshconv' | 'box' | 'cylinder' | 'sphere' | 'torus';
@@ -345,7 +351,7 @@ export function App() {
   useEffect(() => { setSel((p) => (p && snap.bodies.find((b) => b.name === p.body)?.faces.some((f) => f.index === p.face) ? p : null)); }, [snap]);
 
   // ---- sketching
-  const chooseTool = (t: Tool | null) => { setOffsetPick(null); setTool(t); setPending([]); clearTyped(); setEdit(null); setPicks([]); if (t) setSelected([]); setError(''); };
+  const chooseTool = (t: Tool | null) => { setOffsetPick(null); setTool(t); setPending([]); clearTyped(); setEdit(null); setPicks([]); if (t && t !== 'smirror' && t !== 'scirc') setSelected([]); setError(''); };
   const applyResult = (r: ReturnType<typeof onClick>) => {
     setError(r.message ?? '');
     setPending(r.pending);
@@ -363,6 +369,43 @@ export function App() {
     setProfiles([]);
     setSelected((cur) => (additive ? [...cur, ...hits.filter((i) => !cur.includes(i))] : hits));
   };
+  const numsOf = (t: string) => t.split(/[,\s]+/).filter(Boolean).map(Number);
+  /** The middle of the selected curves' box: what Move and Scale turn and grow about. */
+  const selectionCentre = (): Vec2 | null => {
+    const pts = (activeSketch?.curves ?? []).filter((c) => selected.includes(c.id)).flatMap((c) => curvePoints(c)); if (!pts.length) return null;
+    const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+    return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2].map((v) => Math.round(v * 1000) / 1000) as Vec2;
+  };
+  const needSelection = () => { if (selected.length && selectionCentre()) return true; setError('Select the curves first (click one, Shift adds more, or drag a box round them), then choose this'); return false; };
+  const sketchMove = () => {
+    if (!needSelection()) return; const ents = selected, ctr = selectionCentre()!; chooseTool(null); setSelected(ents);
+    setEdit({ title: 'Move: dx, dy [, turn in degrees]', value: '10, 0', options: ['Move', 'Copy'], option: 'Move', submit: (v, o) => {
+      const n = numsOf(v); if (n.length < 2 || n.some((q) => !Number.isFinite(q))) { setError('Type dx, dy (and, if you want, an angle)'); return; }
+      send([{ command: 'sketch.move', params: { entities: ents, translate: [n[0], n[1]], ...(n[2] ? { angle: n[2], center: ctr } : {}), copy: o === 'Copy' } }]);
+    } });
+  };
+  const sketchScale = () => {
+    if (!needSelection()) return; const ents = selected, ctr = selectionCentre()!; chooseTool(null); setSelected(ents);
+    setEdit({ title: 'Scale the selection about its middle: factor', value: '2', submit: (v) => { const f = Number(v); if (!(f > 0)) { setError('The factor must be above 0'); return; } send([{ command: 'sketch.scale', params: { entities: ents, base: ctr, factor: f } }]); } });
+  };
+  const sketchRectPattern = () => {
+    if (!needSelection()) return; const ents = selected; chooseTool(null); setSelected(ents);
+    setEdit({ title: 'Rectangular pattern: count, spacing [, count 2, spacing 2]', value: '3, 10', submit: (v) => {
+      const n = numsOf(v); if (!(n[0]! >= 2) || !Number.isFinite(n[1]!)) { setError('Type count (2 or more) and spacing, for example 3, 10'); return; }
+      send([{ command: 'sketch.pattern.rectangular', params: { entities: ents, count: n[0], spacing: n[1], ...(n[2]! >= 2 && Number.isFinite(n[3]!) ? { count2: n[2], spacing2: n[3] } : {}) } }]); setSelected([]);
+    } });
+  };
+  const sketchAuto = () => { chooseTool(null); send([{ command: 'sketch.auto_constrain', params: {} }]); };
+  /** Insert a DXF or SVG file into the open sketch. */
+  const sketchInsert = (kind: 'dxf' | 'svg') => { void (async () => {
+    try {
+      const picked = await pickOpenFile([typeForExt(kind)]); if (!picked) return;
+      if (extOf(picked.file.name) !== kind) { setError(`Choose a .${kind} file`); return; }
+      const text = await picked.file.text();
+      const s = await run(() => api.insertIntoSketch(kind, text));
+      if (s) setNotice(`Inserted ${picked.file.name} into ${activeSketch?.name ?? 'the sketch'}`);
+    } catch (e) { setError((e as Error).message); }
+  })(); };
   const sketchClick = (pt: Vec2, tol: number, additive: boolean) => {
     const sk = activeSketch; if (!sk) return;
     if (isDraw(tool)) { applyResult(onClick(tool, pending, pending.length ? applyTyped(tool, pending, pt, sizes) : pt)); return; } // typed sizes hold when the shape is placed by a click
@@ -386,6 +429,20 @@ export function App() {
       case 'trim': send([{ command: 'sketch.trim', params: { curve: hit.id, at: pt } }]); break;
       case 'extend': send([{ command: 'sketch.extend', params: { curve: hit.id, at: pt } }]); break;
       case 'offset': setOffsetPick(hit.id); clearTyped(); break; // the pointer now sets the distance; a click places it
+      case 'chamfer': setEdit({ title: 'Chamfer distance (equal on both sides)', value: '2', submit: (v) => send([{ command: 'sketch.chamfer.equal_distance', params: { point: hit.id, distance: numOrExpr(v) } }]) }); break;
+      case 'break': send([{ command: 'sketch.break', params: { curve: hit.id, points: [pt] } }]); break;
+      case 'smirror': {
+        const ents = selected.filter((i) => i !== hit.id);
+        if (!(hit.kind === 'curve' && hit.type === 'line')) { setError('Click a line to mirror about (a construction line works well)'); break; }
+        if (!ents.length) { setError('Select the curves to mirror first (click one, or drag a box round them), then choose Mirror and click the line'); break; }
+        send([{ command: 'sketch.mirror', params: { entities: ents, line: hit.id } }]); setTool(null); setSelected([]); break;
+      }
+      case 'scirc': {
+        if (!selected.length) { setError('Select the curves to repeat first, then choose Circular Pattern and click the centre point'); break; }
+        const ents = selected;
+        setEdit({ title: 'Circular pattern: count [, total angle]', value: '6', submit: (v) => { const n = numsOf(v); if (!(n[0]! >= 2)) { setError('The count must be 2 or more'); return; } send([{ command: 'sketch.pattern.circular', params: { entities: ents, center: hit.id, count: n[0], ...(n[1] ? { angle: n[1] } : {}) } }]); setTool(null); setSelected([]); } });
+        break;
+      }
       case 'fillet': setEdit({ title: 'Fillet radius', value: '2', submit: (v) => send([{ command: 'sketch.fillet', params: { point: hit.id, radius: numOrExpr(v) } }]) }); break;
       default: { // constraint tools collect the picks they need, then send one constraint
         const next = [...picks, hit];
@@ -1111,7 +1168,7 @@ export function App() {
     const face = sel ? snap.bodies.find((b) => b.name === sel.body)?.faces.find((f) => f.index === sel.face) : undefined;
     if (mode === 'sketch') {
       items.push({ label: 'Sketch', heading: true, onClick: () => {} }, { label: 'Finish Sketch', onClick: () => void finishSketch() });
-      for (const [label, t] of [['Line   L', 'line'], ['2-Point Rectangle   R', 'rect'], ['Center Rectangle', 'rectCenter'], ['Center Circle   C', 'circle'], ['2-Point Circle', 'circle2'], ['3-Point Arc   A', 'arc3'], ['Slot', 'slot'], ['3-Point Rectangle', 'rect3'], ['Rounded Rectangle', 'rectRound'], ['3-Point Circle', 'circle3'], ['Center Point Arc', 'arcC'], ['Inscribed Polygon', 'polyIn'], ['Circumscribed Polygon', 'polyOut'], ['Edge Polygon', 'polyEdge'], ['Ellipse', 'ellipse'], ['Fit Point Spline', 'spline'], ['Point', 'point'], ['Trim   T', 'trim'], ['Offset   O', 'offset'], ['Fillet', 'fillet'], ['Sketch Dimension   D', 'dimension']] as [string, Tool][]) items.push({ label, onClick: () => chooseTool(t) });
+      for (const [label, t] of [['Line   L', 'line'], ['2-Point Rectangle   R', 'rect'], ['Center Rectangle', 'rectCenter'], ['Center Circle   C', 'circle'], ['2-Point Circle', 'circle2'], ['3-Point Arc   A', 'arc3'], ['Slot', 'slot'], ['3-Point Rectangle', 'rect3'], ['Rounded Rectangle', 'rectRound'], ['3-Point Circle', 'circle3'], ['Center Point Arc', 'arcC'], ['Inscribed Polygon', 'polyIn'], ['Circumscribed Polygon', 'polyOut'], ['Edge Polygon', 'polyEdge'], ['Ellipse', 'ellipse'], ['Fit Point Spline', 'spline'], ['Point', 'point'], ['Trim   T', 'trim'], ['Offset   O', 'offset'], ['Fillet', 'fillet'], ['Chamfer', 'chamfer'], ['Break', 'break'], ['Sketch Dimension   D', 'dimension']] as [string, Tool][]) items.push({ label, onClick: () => chooseTool(t) });
     } else if (mode === 'model') {
       if (profiles.length) items.push({ label: 'Selected shape', heading: true, onClick: () => {} }, { label: 'Extrude   E', onClick: () => void startExtrude('extrude') }, { label: 'Revolve', onClick: () => void startExtrude('revolve') }, { label: 'Sweep', onClick: () => void startExtrude('sweep') }, { label: 'Loft', onClick: () => void startExtrude('loft') }, { label: 'Emboss', onClick: () => void startExtrude('emboss') });
       if (sel) items.push({ label: 'Selected face', heading: true, onClick: () => {} }, { label: 'Press Pull   Q', onClick: () => void startModify('presspull') }, { label: 'Hole   H', onClick: () => void startModify('hole') }, { label: 'Move / Copy   M', onClick: () => void startModify('move') }, { label: 'Offset Face', onClick: () => void startModify('offsetface') }, { label: 'Draft', onClick: () => void startModify('draft') }, { label: 'Shell', onClick: () => void startModify('shell') }, { label: 'Thread', disabled: !face?.cylinder, onClick: () => void startModify('thread') }, { label: 'Create Sketch on this face', disabled: !face?.planeNormal, onClick: () => planePicked({ face: sel.point, body: sel.body, index: sel.face }) }, { label: 'Export this face as DXF', disabled: !face?.planeNormal, onClick: () => void doExport('dxf', undefined, sel) });
@@ -1353,7 +1410,7 @@ export function App() {
         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? 'Light' : 'Dark'}</button>
       </header>
 
-      <Ribbon mode={mode} tool={tool} canHole={snap.bodies.length > 0 && mode !== 'pickPlane'} canModify={snap.bodies.length > 0 && mode !== 'pickPlane'} modTool={mode === 'modify' ? modTool : null} extKind={mode === 'extrude' ? extKind : null} onFillet={() => void startModify('fillet')} onChamfer={() => void startModify('chamfer')} onPressPull={() => void startModify('presspull')} onShell={() => void startModify('shell')} onOffsetFace={() => void startModify('offsetface')} onDraft={() => void startModify('draft')} onCombine={() => void startModify('combine')} onMirror={() => void startModify('mirror')} onRPattern={() => void startModify('rpattern')} onCPattern={() => void startModify('cpattern')} onCreateSketch={createSketch} onExtrude={() => void startExtrude('extrude')} onRevolve={() => void startExtrude('revolve')} onSweep={() => void startExtrude('sweep')} onLoft={() => void startExtrude('loft')} onHole={() => void startModify('hole')} onThread={() => void startModify('thread')} onMove={() => void startModify('move')} onSplit={() => void startModify('split')} onRib={() => void startExtrude('rib')} onPipe={() => void startExtrude('pipe')} onEmboss={() => void startExtrude('emboss')} onCoil={() => void startModify('coil')} onBox={() => void startModify('box')} onCylinder={() => void startModify('cylinder')} onSphere={() => void startModify('sphere')} onTorus={() => void startModify('torus')} onExport={() => openExport(false)} onSlicer={() => openExport(true)} onScale={() => void startModify('scale')} onMeshConvert={() => void startModify('meshconv')} onTool={(t) => chooseTool(t)} onFinish={() => void finishSketch()} measuring={measure !== null} onMeasure={() => void startMeasure()} onSection={() => setSection({ plane: 'XZ', offset: '0', body: snap.bodies[0]?.name ?? '' })} onImport={doImport} />
+      <Ribbon mode={mode} tool={tool} canHole={snap.bodies.length > 0 && mode !== 'pickPlane'} canModify={snap.bodies.length > 0 && mode !== 'pickPlane'} modTool={mode === 'modify' ? modTool : null} extKind={mode === 'extrude' ? extKind : null} onFillet={() => void startModify('fillet')} onChamfer={() => void startModify('chamfer')} onPressPull={() => void startModify('presspull')} onShell={() => void startModify('shell')} onOffsetFace={() => void startModify('offsetface')} onDraft={() => void startModify('draft')} onCombine={() => void startModify('combine')} onMirror={() => void startModify('mirror')} onRPattern={() => void startModify('rpattern')} onCPattern={() => void startModify('cpattern')} onCreateSketch={createSketch} onExtrude={() => void startExtrude('extrude')} onRevolve={() => void startExtrude('revolve')} onSweep={() => void startExtrude('sweep')} onLoft={() => void startExtrude('loft')} onHole={() => void startModify('hole')} onThread={() => void startModify('thread')} onMove={() => void startModify('move')} onSplit={() => void startModify('split')} onRib={() => void startExtrude('rib')} onPipe={() => void startExtrude('pipe')} onEmboss={() => void startExtrude('emboss')} onCoil={() => void startModify('coil')} onSketchMove={sketchMove} onSketchScale={sketchScale} onSketchRectPattern={sketchRectPattern} onSketchAuto={sketchAuto} onSketchInsert={sketchInsert} onBox={() => void startModify('box')} onCylinder={() => void startModify('cylinder')} onSphere={() => void startModify('sphere')} onTorus={() => void startModify('torus')} onExport={() => openExport(false)} onSlicer={() => openExport(true)} onScale={() => void startModify('scale')} onMeshConvert={() => void startModify('meshconv')} onTool={(t) => chooseTool(t)} onFinish={() => void finishSketch()} measuring={measure !== null} onMeasure={() => void startMeasure()} onSection={() => setSection({ plane: 'XZ', offset: '0', body: snap.bodies[0]?.name ?? '' })} onImport={doImport} />
 
       <Browser docName={snap.doc.name} bodies={snap.bodies} sketches={snap.sketches} parameters={snap.parameters} hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} busy={busy}
         onToggleBody={(n) => setHiddenBodies((s) => toggle(s, n))} onToggleSketch={(i) => setHiddenSketches((s) => toggle(s, i))} onToggleOrigin={() => setShowOrigin((v) => !v)} pickingPlane={mode === 'pickPlane'} onPickPlane={(plane) => planePicked({ plane })} onEditSketch={(n) => void editSketch(n)}

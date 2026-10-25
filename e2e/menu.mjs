@@ -2,11 +2,11 @@
 export async function pick(p, id) {
   const bar = p.getByTestId(id);
   if (await bar.count() && await bar.first().isVisible()) { await bar.first().click(); return; }
-  for (const g of ['create', 'modify', 'inspect', 'insert', 'mesh']) {
+  for (const g of ['create', 'modify', 'pattern', 'inspect', 'insert', 'mesh']) {
     await p.getByTestId(`menu-${g}`).click().catch(() => {});
     const it = p.getByTestId(`item-${id}`);
     if (await it.count() && await it.first().isVisible()) { await it.first().click(); return; }
-    await p.keyboard.press('Escape');
+    await p.getByTestId(`menu-${g}`).click().catch(() => {}); // close it again (Esc would also clear a selection)
   }
   throw new Error(`no ribbon command ${id}`);
 }
@@ -15,11 +15,11 @@ export async function pick(p, id) {
 export async function enabled(p, id) {
   const bar = p.getByTestId(id);
   if (await bar.count() && await bar.first().isVisible()) return bar.first().isEnabled();
-  for (const g of ['create', 'modify', 'inspect', 'insert', 'mesh']) {
+  for (const g of ['create', 'modify', 'pattern', 'inspect', 'insert', 'mesh']) {
     await p.getByTestId(`menu-${g}`).click().catch(() => {});
     const it = p.getByTestId(`item-${id}`);
-    if (await it.count() && await it.first().isVisible()) { const e = await it.first().isEnabled(); await p.keyboard.press('Escape'); return e; }
-    await p.keyboard.press('Escape');
+    if (await it.count() && await it.first().isVisible()) { const e = await it.first().isEnabled(); await p.getByTestId(`menu-${g}`).click().catch(() => {}); return e; }
+    await p.getByTestId(`menu-${g}`).click().catch(() => {});
   }
   throw new Error(`no ribbon command ${id}`);
 }

@@ -6,8 +6,8 @@ import { round3 } from './snap';
 export type DrawTool = 'line' | 'rect' | 'rectCenter' | 'circle' | 'circle2' | 'arc3' | 'slot' | 'rect3' | 'rectRound' | 'circle3' | 'arcC' | 'polyIn' | 'polyOut' | 'polyEdge' | 'ellipse' | 'point' | 'spline';
 /** Settings the drawing tools read: how many sides the polygon tools make. */
 export const drawOpts = { sides: 6 };
-export type ConstraintTool = 'horizontal' | 'coincident' | 'parallel' | 'perpendicular' | 'tangent' | 'equal' | 'midpoint' | 'concentric' | 'fix';
-export type PickTool = 'dimension' | 'trim' | 'extend' | 'offset' | 'fillet' | ConstraintTool;
+export type ConstraintTool = 'horizontal' | 'coincident' | 'parallel' | 'perpendicular' | 'tangent' | 'equal' | 'midpoint' | 'concentric' | 'fix' | 'collinear' | 'symmetry';
+export type PickTool = 'dimension' | 'trim' | 'extend' | 'offset' | 'fillet' | 'chamfer' | 'break' | 'smirror' | 'scirc' | ConstraintTool;
 export type Tool = DrawTool | PickTool;
 export interface Step { command: string; params: Record<string, unknown> }
 export interface Result { steps: Step[]; pending: Vec2[]; message?: string }
@@ -18,7 +18,7 @@ export const OPEN_ON_DRAG: readonly string[] = ['rect', 'rectCenter', 'circle', 
 export const isDraw = (t: Tool | null): t is DrawTool => !!t && (DRAW as string[]).includes(t);
 /** What the pointer can land on for a tool that picks existing geometry. */
 export const PICK_MODE: Record<PickTool, 'curve' | 'point' | 'any'> = {
-  dimension: 'any', trim: 'curve', extend: 'curve', offset: 'curve', fillet: 'point',
+  dimension: 'any', trim: 'curve', extend: 'curve', offset: 'curve', fillet: 'point', chamfer: 'point', break: 'curve', smirror: 'curve', scirc: 'point', collinear: 'curve', symmetry: 'any',
   horizontal: 'any', coincident: 'any', parallel: 'curve', perpendicular: 'curve', tangent: 'curve', equal: 'curve', midpoint: 'any', concentric: 'curve', fix: 'any',
 };
 
@@ -280,7 +280,7 @@ function catmullRom(pts: Vec2[]): Vec2[] {
 
 /** Where a constraint tool is after the entities picked so far: ready with a step, still needing more picks, or refusing with a reason. */
 export function constraintStep(tool: ConstraintTool, picks: Picked[]): { step?: Step; done: boolean; message?: string } {
-  const [x, y] = picks;
+  const [x, y, z] = picks;
   switch (tool) {
     case 'horizontal':
       if (!x) return { done: false };
@@ -297,7 +297,12 @@ export function constraintStep(tool: ConstraintTool, picks: Picked[]): { step?: 
     }
     case 'fix':
       return x ? { done: true, step: { command: 'sketch.constraint.fix', params: { entity: x.id } } } : { done: false };
-    default: { // parallel, perpendicular, tangent, equal, concentric: two curves
+    case 'symmetry': { // two points (or two curves), then the line they mirror about
+      if (!x || !y) return { done: false };
+      if (!z) return { done: false };
+      return z.kind === 'curve' && z.type === 'line' ? { done: true, step: { command: 'sketch.constraint.symmetry', params: { a: x.id, b: y.id, line: z.id } } } : { done: true, message: 'The third pick must be a line (the line of symmetry)' };
+    }
+    default: { // parallel, perpendicular, tangent, equal, concentric, collinear: two curves
       if (!x || !y) return { done: false };
       return { done: true, step: { command: `sketch.constraint.${tool}`, params: { a: x.id, b: y.id } } };
     }

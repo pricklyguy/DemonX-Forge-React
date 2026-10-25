@@ -109,6 +109,16 @@ async function api(path: string, req: IncomingMessage, res: ServerResponse) {
     await e.importModel(bytes, ext as 'step' | 'stp' | 'iges' | 'igs' | 'stl' | 'obj' | '3mf', safeName(q.get('name'), 'Imported'));
     return send(res, 200, await e.snapshot());
   }
+  if (path === '/api/sketch-insert') { // the body is the text of a DXF or SVG file; ?kind=dxf|svg. It goes into the open sketch (the engine reads the text, never a path from the browser)
+    if (req.method !== 'POST') throw new BadRequest('POST the file');
+    const kind = new URL(req.url ?? '/', 'http://localhost').searchParams.get('kind');
+    if (kind !== 'dxf' && kind !== 'svg') throw new BadRequest('Only DXF and SVG files can be inserted into a sketch');
+    if (!(await e.snapshot()).sketches.some((k) => k.active)) throw new BadRequest('Open a sketch first (Create Sketch), then insert the file into it');
+    const text = Buffer.from(await readBytes(req, MAX_IMPORT)).toString('utf8');
+    if (!text.trim()) throw new BadRequest('The file is empty');
+    const warnings = await e.run([{ command: kind === 'dxf' ? 'sketch.insert_dxf' : 'sketch.insert_svg', params: { text } }]);
+    return send(res, 200, { ...(await e.snapshot()), warnings });
+  }
   const a = req.method === 'POST' ? await readBody(req) : {};
   if (path === '/api/save') { const name = safeName(a.name, (await e.snapshot()).doc.name); return sendFile(res, await e.save(name), `${name}.forge`); }
   if (path === '/api/export') {

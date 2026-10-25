@@ -112,6 +112,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **0.30.0 (2026-10-25):** ten more sketch tools (3-point rectangle, rounded rectangle, 3-point circle, centre-point arc, three polygons, ellipse, spline, point) through the same click / typed / preview functions in `web/src/sketch/tools.ts`; polygon sides live in `drawOpts` (set from the Sketch Palette). File > Preferences with "Show initial start options". **Owner wish:** their own start page like Fusion's Home and SolidCraft's Start (New design, Open, Recent files with thumbnails, samples). Needs a recent-files list (names and paths; the browser cannot read a path, so keep file handles or a list the server keeps), thumbnails, and a place to show it; do after the sketch tools. Next sketch pass: Modify (chamfer, break, scale, move/copy, mirror, patterns), constraints (collinear, symmetry, AutoConstrain), Insert DXF / SVG, text.
 
+**0.31.0 (2026-10-25):** sketch Chamfer, Break, Move / Copy, Scale, Mirror, Circular and Rectangular Pattern, Collinear, Symmetry, AutoConstrain, Insert DXF / SVG (`/api/sketch-insert`: text in, engine reads the text, the generic route still refuses the insert commands). Selection-based tools keep the selection when chosen (`chooseTool`). Left for sketches: Text, Project / Intersect, slot variants, tangent circles. Then Construct planes (with a how-to for the owner).
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.

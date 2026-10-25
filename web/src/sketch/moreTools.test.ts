@@ -1,6 +1,6 @@
 // The drawing tools added after the first seven: 3-point rectangle, rounded rectangle, 3-point circle, centre-point arc, polygons, ellipse, point and spline.
 import { describe, expect, it } from 'vitest';
-import { drawOpts, isDraw, onClick, onTyped, polygonPoints, preview, roundedRadius, sizeBoxes, splineStep } from './tools';
+import { constraintStep, PICK_MODE, drawOpts, isDraw, onClick, onTyped, polygonPoints, preview, roundedRadius, sizeBoxes, splineStep } from './tools';
 
 describe('more drawing tools', () => {
   it('knows they are drawing tools', () => {
@@ -69,5 +69,15 @@ describe('more drawing tools', () => {
     expect(splineStep([[0, 0]], false)).toBeNull();
     expect(splineStep(r.pending, false)).toEqual({ command: 'sketch.spline.fit_point', params: { points: r.pending } });
     expect(preview('spline', r.pending, [30, 5])[0]!.length).toBeGreaterThan(30);
+  });
+
+  it('collinear takes two curves and symmetry two things and a line', () => {
+    const l = (id: string) => ({ kind: 'curve' as const, id, type: 'line' }), pt = (id: string) => ({ kind: 'point' as const, id });
+    expect(constraintStep('collinear', [l('l1')]).done).toBe(false);
+    expect(constraintStep('collinear', [l('l1'), l('l2')]).step).toEqual({ command: 'sketch.constraint.collinear', params: { a: 'l1', b: 'l2' } });
+    expect(constraintStep('symmetry', [pt('p1'), pt('p2')]).done).toBe(false);
+    expect(constraintStep('symmetry', [pt('p1'), pt('p2'), l('l3')]).step).toEqual({ command: 'sketch.constraint.symmetry', params: { a: 'p1', b: 'p2', line: 'l3' } });
+    expect(constraintStep('symmetry', [pt('p1'), pt('p2'), pt('p3')]).message).toMatch(/line/);
+    expect(PICK_MODE.chamfer).toBe('point'); expect(PICK_MODE.break).toBe('curve');
   });
 });

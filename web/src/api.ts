@@ -66,6 +66,13 @@ export const api = {
     if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}`);
     return j as Snapshot;
   },
+  /** Put the shapes of a DXF or SVG file into the open sketch. */
+  insertIntoSketch: async (kind: 'dxf' | 'svg', text: string): Promise<Snapshot> => {
+    const r = await fetch(`/api/sketch-insert?kind=${kind}`, { method: 'POST', body: text });
+    const j = await r.json().catch(() => ({ error: `The server answered ${r.status}` }));
+    if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}`);
+    return j as Snapshot;
+  },
   /** A cut through a body as DXF (the design is not changed). */
   exportSection: (section: { plane: 'XY' | 'XZ' | 'YZ'; offset: number; body: string }) => fileCall('export', { format: 'dxf', section }),
   /** Mesh to Solid: rebuild a closed mechanical mesh (an imported STL, OBJ or 3MF) as an editable solid. */
