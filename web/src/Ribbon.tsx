@@ -160,6 +160,7 @@ export function Ribbon(p: Props) {
     T('circle2', <Icon.circle2 />, '2-Point Circle', 'circle2', { pinned: true }),
     T('arc3', <Icon.arc3 />, '3-Point Arc', 'arc3', { pinned: true, keyHint: 'A' }),
     T('slot', <Icon.slot />, 'Slot', 'slot', { pinned: true }),
+    T('lineMid', <Icon.tLineMid />, 'Midpoint Line', 'lineMid'),
     T('rect3', <Icon.tRect3 />, '3-Point Rectangle', 'rect3'),
     T('rectRound', <Icon.tRectRound />, 'Rounded Rectangle', 'rectRound'),
     T('circle3', <Icon.tCircle3 />, '3-Point Circle', 'circle3'),

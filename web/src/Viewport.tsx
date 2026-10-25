@@ -39,6 +39,9 @@ interface Props {
   hiddenSketches: Set<number>;
   showOrigin: boolean;
   /** Construction planes (Offset Plane and so on): drawn unless hidden, and chosen like the origin planes when a sketch plane is being picked. */
+  /** While a sketch plane is being chosen: draw the origin planes as sheets (off: only the one whose button the pointer is over). */
+  planeSheets?: boolean;
+  hoverPlane?: string | null;
   constPlanes?: ConstructionPlane[];
   hiddenPlanes?: Set<string>;
   showGrid: boolean;
@@ -124,7 +127,7 @@ export function Viewport(props: Props) {
     // dimension values drawn as small labels over the sketch (plain HTML, moved to follow the camera every frame)
     const labelLayer = document.createElement('div'); labelLayer.className = 'dimlayer'; el.appendChild(labelLayer);
     const liveLayer = document.createElement('div'); liveLayer.className = 'dimlayer'; el.appendChild(liveLayer); // the sizes shown while a shape is being drawn
-    let labels: { el: HTMLElement; w: THREE.Vector3 }[] = [];
+    let labels: { el: HTMLElement; w: THREE.Vector3; size?: number }[] = []; // size: how long the thing measured is, so a label too crowded to read can step aside
     // the size boxes on the shape being drawn: real inputs (typing replaces the pointer's value), kept between rebuilds so focus survives
     let liveAnchors: { w: THREE.Vector3; text: string }[] = [];
     const liveInputs: HTMLInputElement[] = [];
@@ -225,7 +228,7 @@ export function Viewport(props: Props) {
         const seg = (a: Vec2, b: Vec2) => { dimLines.push(...toWorld(plane, a), ...toWorld(plane, b)); };
         if (p.showDims !== false) { // the sizes on the sketch: a driving dimension where there is one, otherwise the measured size (double-click either to change it)
           const n2 = (x: number) => String(Math.round(x * 1000) / 1000);
-          const label = (curveId: string, at: Vec2, text: string, driving: boolean, param?: string) => {
+          const label = (curveId: string, at: Vec2, text: string, driving: boolean, param?: string, size?: number) => {
             const lab = document.createElement('div'); lab.className = `dimlabel dimedit${driving ? '' : ' measured'}`; lab.dataset.testid = driving ? 'dimlabel' : 'measured'; lab.dataset.curve = curveId; if (param) lab.dataset.param = param; lab.textContent = text; lab.title = 'Double-click to change';
             lab.addEventListener('dblclick', (ev) => {
               ev.stopPropagation(); if (lab.querySelector('input')) return;
@@ -237,7 +240,7 @@ export function Viewport(props: Props) {
               inp.addEventListener('blur', () => finish(false));
             });
             lab.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-            labelLayer.appendChild(lab); labels.push({ el: lab, w: v3(toWorld(plane, at)) });
+            labelLayer.appendChild(lab); labels.push({ el: lab, w: v3(toWorld(plane, at)), ...(size !== undefined ? { size } : {}) });
           };
           const has = new Set<string>();
           for (const d of s.dimensions) {
@@ -274,7 +277,7 @@ export function Viewport(props: Props) {
                 const m: Vec2 = [(c.start[0] + c.end[0]) / 2, (c.start[1] + c.end[1]) / 2];
                 let nx = -dy / len, ny = dx / len; if ((m[0] - mid[0]) * nx + (m[1] - mid[1]) * ny < 0) { nx = -nx; ny = -ny; } // the label stands outside the shape
                 const off = wpp() * 16;
-                label(c.id, [m[0] + nx * off, m[1] + ny * off], n2(len), false);
+                label(c.id, [m[0] + nx * off, m[1] + ny * off], n2(len), false, undefined, len);
               } else if (c.type === 'circle' && c.center && c.radius !== undefined) { const d = (c.radius + wpp() * 20) * Math.SQRT1_2; label(c.id, [c.center[0] + d, c.center[1] + d], `Ø${n2(2 * c.radius)}`, false); } // up and to the right of the circle, not over it or its rim
               else if (c.type === 'arc' && c.center && c.radius !== undefined) { const d = (c.radius + wpp() * 20) * Math.SQRT1_2; label(c.id, [c.center[0] + d, c.center[1] + d], `R${n2(c.radius)}`, false); }
             }
@@ -325,17 +328,19 @@ export function Viewport(props: Props) {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 1.3, r * 1.3), new THREE.MeshBasicMaterial({ color: '#e0a63a', transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
         m.matrixAutoUpdate = false; m.matrix.copy(planeMatrix(pl)); m.userData.plane = c.name;
         m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: '#e0a63a', transparent: true, opacity: 0.9 })));
-        gPlanes.add(m); if (p.mode === 'pickPlane') planeMeshes.push(m);
+        gPlanes.add(m); if (p.mode === 'pickPlane' && p.planeSheets !== false) planeMeshes.push(m);
         const label = document.createElement('span'); label.className = 'planelabel'; label.style.color = '#e0a63a'; label.textContent = c.name;
         planeLayer.appendChild(label); planeLabels.push({ el: label, w: v3(toWorld(pl, [r * 0.5, r * 0.5])) });
       }
       if (!(p.mode === 'pickPlane' || p.showOrigin)) return;
       for (const key of ['XY', 'XZ', 'YZ'] as const) {
+        const sheet = p.mode !== 'pickPlane' || p.planeSheets !== false || p.hoverPlane === key; // with the sheets off, a plane shows only while the pointer is on its button
+        if (!sheet) continue;
         const pl = ORIGIN_PLANES[key];
         const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 1.6, r * 1.6), new THREE.MeshBasicMaterial({ color: colors[key]!, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
         m.matrixAutoUpdate = false; m.matrix.copy(planeMatrix(pl)); m.userData.plane = key;
         const edge = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: colors[key]!, transparent: true, opacity: 1 }));
-        m.add(edge); gPlanes.add(m); planeMeshes.push(m);
+        m.add(edge); gPlanes.add(m); if (p.mode !== 'pickPlane' || p.planeSheets !== false) planeMeshes.push(m);
         const label = document.createElement('span'); label.className = 'planelabel'; label.style.color = colors[key]!;
         label.textContent = `${key} / ${key === 'XY' ? 'Top' : key === 'XZ' ? 'Front' : 'Side'}`;
         planeLayer.appendChild(label); planeLabels.push({ el: label, w: v3(toWorld(pl, [r * 0.65, r * 0.65])) });
@@ -672,7 +677,7 @@ export function Viewport(props: Props) {
         setRay(e);
         const hit = ray.intersectObjects(planeMeshes, false)[0];
         const face = planarFaceHit(), bodyDist = ray.intersectObjects(gBodies.children, false)[0]?.distance ?? Infinity;
-        const onFace = face && bodyDist <= (hit?.distance ?? Infinity) ? face : null; // a flat face is what a click would pick: light it up like a plane
+        const onFace = face; void bodyDist; // a flat face is what a click would pick: light it up like a plane
         lightFace(onFace ? { body: onFace.body, face: onFace.index } : null);
         planeMeshes.forEach((m) => {
           const active = !onFace && m === hit?.object;
@@ -719,7 +724,7 @@ export function Viewport(props: Props) {
         const hit = ray.intersectObjects(planeMeshes, false)[0];
         const face = planarFaceHit();
         const bodyDist = ray.intersectObjects(gBodies.children, false)[0]?.distance ?? Infinity;
-        if (face && bodyDist <= (hit?.distance ?? Infinity)) p.onPlanePick({ face: face.point, body: face.body, index: face.index });
+        if (face) p.onPlanePick({ face: face.point, body: face.body, index: face.index }); // a flat face under the pointer is always the pick, however many plane sheets are in front of it
         else if (hit) p.onPlanePick({ plane: hit.object.userData.plane });
       } else if (p.mode === 'modify' && !p.pickFaces) {
         p.onEdgePick(pickEdge(e), e.shiftKey || e.ctrlKey || e.metaKey);
@@ -786,7 +791,8 @@ export function Viewport(props: Props) {
         if (document.activeElement !== inp) inp.value = (P.current.sizes?.[i] ?? '') !== '' ? P.current.sizes![i]! : an.text; // not being edited: the typed value, or what the pointer gives
         inp.style.width = `${Math.max(4, inp.value.length + 1)}ch`;
       });
-      for (const l of [...labels, ...planeLabels]) { const q = l.w.clone().project(cam); l.el.style.display = q.z > 1 ? 'none' : ''; l.el.style.left = `${((q.x + 1) / 2) * size.x}px`; l.el.style.top = `${((1 - q.y) / 2) * size.y}px`; }
+      // measured sizes of short pieces (the outline of text, say) hide until you zoom in
+      const ppu = 1 / Math.max(wpp(), 1e-9); for (const l of [...labels, ...planeLabels]) { const q = l.w.clone().project(cam), tiny = 'size' in l && typeof l.size === 'number' && l.size * ppu < 24; l.el.style.display = q.z > 1 || tiny ? 'none' : ''; l.el.style.left = `${((q.x + 1) / 2) * size.x}px`; l.el.style.top = `${((1 - q.y) / 2) * size.y}px`; }
     };
     loop();
     (window as any).__forge = {
@@ -813,7 +819,7 @@ export function Viewport(props: Props) {
   const p = props;
   useEffect(() => { S.current?.rebuild('bodies'); (S.current as any)?.fitOnce?.(); }, [p.bodies, p.hiddenBodies, p.selectedFaces, p.selectedBodies, p.showEdges, p.theme, p.mode === 'pickPlane']);
   useEffect(() => { S.current?.rebuild('sketches'); }, [p.sketches, p.hiddenSketches, p.mode, p.tool, p.showProfiles, p.selectedProfiles, p.theme, p.showDims]);
-  useEffect(() => { S.current?.rebuild('planes'); }, [p.mode, p.showOrigin, p.bodies, p.theme, p.constPlanes, p.hiddenPlanes]);
+  useEffect(() => { S.current?.rebuild('planes'); }, [p.mode, p.showOrigin, p.bodies, p.theme, p.constPlanes, p.hiddenPlanes, p.planeSheets, p.hoverPlane]);
   useEffect(() => { S.current?.rebuild('preview'); }, [p.pending, p.tool, p.mode, p.activeSketch, p.pickMode, p.highlight, p.showPoints, p.extraPreview, p.sizes?.join('|')]);
   useEffect(() => { S.current?.rebuild('camera'); }, [p.mode, p.activeSketch?.id]);
   useEffect(() => { S.current?.rebuild('handle'); }, [p.handle?.origin.join(), p.handle?.dir.join(), p.handle?.value, p.handles?.map((h) => `${h.origin.join()}|${h.dir.join()}|${h.value}|${h.base}|${h.fixed}`).join(';'), p.theme]);

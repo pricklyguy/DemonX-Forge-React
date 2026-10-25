@@ -35,6 +35,7 @@ export const Icon = {
   tText: () => <Svg><path d="M6 7 H22 M14 7 V23 M10.5 23 H17.5" stroke={C} /><path d="M4 26 H24" stroke={A} /></Svg>,
   bPlane: () => <Svg><path d="M3 20 L14 24 L25 20 L14 16 Z" /><path d="M3 11 L14 15 L25 11 L14 7 Z" stroke={A} /><path d="M14 16 V15" /></Svg>,
   bPlaneAngle: () => <Svg><path d="M3 22 L14 26 L25 22 L14 18 Z" /><path d="M5 17 L20 6 L25 14 L10 24 Z" stroke={A} /></Svg>,
+  tLineMid: () => <Svg><path d="M4 21 L24 7" stroke={C} /><circle cx="14" cy="14" r="2.2" stroke={A} /></Svg>,
   hole: () => <Svg><path d="M3 12 L14 7 L25 12 L25 19 L14 24 L3 19 Z" /><ellipse cx="14" cy="14" rx="4.5" ry="2.6" stroke={A} /></Svg>,
   line: () => <Svg><path d="M5 22 L23 6" stroke={C} /><circle cx="5" cy="22" r="2" /><circle cx="23" cy="6" r="2" /></Svg>,
   rect: () => <Svg><rect x="5" y="8" width="18" height="12" stroke={C} /><circle cx="5" cy="8" r="1.6" /><circle cx="23" cy="20" r="1.6" /></Svg>,

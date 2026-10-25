@@ -3,7 +3,7 @@ import type { Vec2 } from '../api';
 import type { Picked } from './pick';
 import { round3 } from './snap';
 
-export type DrawTool = 'line' | 'rect' | 'rectCenter' | 'circle' | 'circle2' | 'arc3' | 'slot' | 'rect3' | 'rectRound' | 'circle3' | 'arcC' | 'polyIn' | 'polyOut' | 'polyEdge' | 'ellipse' | 'point' | 'spline';
+export type DrawTool = 'line' | 'rect' | 'rectCenter' | 'circle' | 'circle2' | 'arc3' | 'slot' | 'rect3' | 'rectRound' | 'circle3' | 'arcC' | 'polyIn' | 'polyOut' | 'polyEdge' | 'ellipse' | 'point' | 'spline' | 'lineMid';
 /** Settings the drawing tools read: how many sides the polygon tools make. */
 export const drawOpts = { sides: 6 };
 export type ConstraintTool = 'horizontal' | 'coincident' | 'parallel' | 'perpendicular' | 'tangent' | 'equal' | 'midpoint' | 'concentric' | 'fix' | 'collinear' | 'symmetry';
@@ -12,7 +12,7 @@ export type Tool = DrawTool | PickTool;
 export interface Step { command: string; params: Record<string, unknown> }
 export interface Result { steps: Step[]; pending: Vec2[]; message?: string }
 
-const DRAW: DrawTool[] = ['line', 'rect', 'rectCenter', 'circle', 'circle2', 'arc3', 'slot', 'rect3', 'rectRound', 'circle3', 'arcC', 'polyIn', 'polyOut', 'polyEdge', 'ellipse', 'point', 'spline'];
+const DRAW: DrawTool[] = ['line', 'rect', 'rectCenter', 'circle', 'circle2', 'arc3', 'slot', 'rect3', 'rectRound', 'circle3', 'arcC', 'polyIn', 'polyOut', 'polyEdge', 'ellipse', 'point', 'spline', 'lineMid'];
 /** After press, drag and release these stay open (the first corner or centre is placed, the pointer still sets the size, a click or typed size finishes), as in Fusion. */
 export const OPEN_ON_DRAG: readonly string[] = ['rect', 'rectCenter', 'circle', 'circle2'];
 export const isDraw = (t: Tool | null): t is DrawTool => !!t && (DRAW as string[]).includes(t);
@@ -103,6 +103,10 @@ export function onClick(tool: DrawTool, pending: Vec2[], pt: Vec2): Result {
       if (lineDist(a, b, p) < EPS) return { steps: [], pending, message: 'Click away from the long axis to set the short one' };
       return { steps: [{ command: 'sketch.ellipse', params: { center: a, major: b, minor: p } }], pending: [] };
     case 'point': return { steps: [{ command: 'sketch.point', params: { point: p } }], pending: [] };
+    case 'lineMid': // the middle of the line, then one end: the other end is the same distance the other way
+      if (!a) return { steps: [], pending: [p] };
+      if (dist(a, p) < EPS) return { steps: [], pending, message: 'A line needs a length' };
+      return { steps: [{ command: 'sketch.line.midpoint', params: { mid: a, end: p } }], pending: [] };
     case 'spline': { // a click adds a point; landing on the first one (after two more) closes the curve; Enter, right-click or Esc ends it open
       const last = pending[pending.length - 1];
       if (last && dist(last, p) < EPS) return { steps: [], pending };
@@ -150,6 +154,11 @@ export function onTyped(tool: DrawTool, pending: Vec2[], cursor: Vec2, text: str
     const ang = v.length > 1 ? (v[1]! * Math.PI) / 180 : Math.atan2(cursor[1] - from[1], cursor[0] - from[0]);
     const end = r3([from[0] + len * Math.cos(ang), from[1] + len * Math.sin(ang)]);
     return { steps: [{ command: 'sketch.line', params: { points: [from, end] } }], pending: [...pending, end] };
+  }
+  if (tool === 'lineMid') {
+    if (!(v[0]! > 0)) return { steps: [], pending, message: 'The length must be above 0' };
+    const ang = v.length > 1 ? (v[1]! * Math.PI) / 180 : Math.atan2(cursor[1] - a[1], cursor[0] - a[0]);
+    return { steps: [{ command: 'sketch.line.midpoint', params: { mid: a, end: r3([a[0] + (v[0]! / 2) * Math.cos(ang), a[1] + (v[0]! / 2) * Math.sin(ang)]) } }], pending: [] };
   }
   if (tool === 'rectRound') {
     const w = v[0]!, h = v.length > 1 ? v[1]! : v[0]!;
@@ -254,6 +263,7 @@ export function preview(tool: DrawTool, pending: Vec2[], cur: Vec2): Vec2[][] {
       return [Array.from({ length: 65 }, (_, i) => { const t = (i / 64) * Math.PI * 2, x = major * Math.cos(t), y = minor * Math.sin(t); return [a[0] + x * ca - y * sa, a[1] + x * sa + y * ca] as Vec2; }), [a, b]];
     }
     case 'point': return [];
+    case 'lineMid': return [[[2 * a[0] - cur[0], 2 * a[1] - cur[1]], cur], [a, cur]];
     case 'spline': return [catmullRom([...pending, cur])];
   }
 }
@@ -360,6 +370,7 @@ export function sizeBoxes(tool: Tool | null, pending: Vec2[], cursor: Vec2): Siz
     }
     case 'polyIn': case 'polyOut': return [{ label: 'Radius', at: [(a[0] + cursor[0]) / 2, (a[1] + cursor[1]) / 2], value: Math.hypot(dx, dy) }, { label: 'Angle', at: [a[0], a[1]], value: (Math.atan2(dy, dx) * 180) / Math.PI }];
     case 'polyEdge': return polar(a);
+    case 'lineMid': return [{ label: 'Length', at: [(a[0] + cursor[0]) / 2, (a[1] + cursor[1]) / 2], value: 2 * Math.hypot(dx, dy) }, { label: 'Angle', at: [a[0], a[1]], value: (Math.atan2(dy, dx) * 180) / Math.PI }];
     case 'arcC': return b ? [] : [{ label: 'Radius', at: [(a[0] + cursor[0]) / 2, (a[1] + cursor[1]) / 2], value: Math.hypot(dx, dy) }, { label: 'Angle', at: [a[0], a[1]], value: (Math.atan2(dy, dx) * 180) / Math.PI }];
     case 'ellipse': return b ? [] : polar(a);
     default: return []; // circle3, point and spline are placed by clicking only
@@ -414,6 +425,7 @@ export function applyTyped(tool: DrawTool, pending: Vec2[], cursor: Vec2, typed:
       return [m[0] + n[0] * w, m[1] + n[1] * w];
     }
     case 'polyIn': case 'polyOut': case 'polyEdge': return polarFrom(a);
+    case 'lineMid': { const L = num(0), an = num(1), len = L !== null && L > 0 ? L / 2 : Math.hypot(cursor[0] - a[0], cursor[1] - a[1]), A = an !== null ? (an * Math.PI) / 180 : Math.atan2(cursor[1] - a[1], cursor[0] - a[0]); return [a[0] + len * Math.cos(A), a[1] + len * Math.sin(A)]; }
     case 'arcC': return b ? cursor : polarFrom(a);
     case 'ellipse': return b ? cursor : polarFrom(a);
     default: return cursor;

@@ -4,6 +4,7 @@ import { buildEdgeGeometry } from '../../server/src/engine/meshEdges';
 import { api, type Snapshot, type Sketch, type SketchCurve, type TimelineItem, type Vec2, type Vec3 } from './api';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Start } from './Start';
+import { ToolOptions } from './ToolOptions';
 import { addRecent, listRecents, removeRecent, type RecentItem } from './recent';
 import { ExportDialog, type ExportChoice, type SlicerInfo } from './ExportDialog';
 import { Browser } from './Browser';
@@ -85,6 +86,7 @@ const TOOL_HINT: Record<string, string[]> = {
   polyEdge: ['Click one end of a side.', 'Click the other end: the polygon stands on the left of the way you went. The sides are set in the Sketch Palette.'],
   ellipse: ['Click the centre.', 'Click the end of the long axis.', 'Click a point on the short side.'],
   point: ['Click where the point goes.'],
+  lineMid: ['Click the middle of the line.', 'Click one end (or type the whole length): the other end is as far the other way.'],
   spline: ['Click the first point.', 'Click the next point.', 'Click more points. Enter, right-click or Esc ends the curve; clicking the first point closes it.'],
   trim: ['Click the piece of a line, arc or circle to remove, between its nearest crossings.'],
   extend: ['Click near the end of a line or arc to extend it to the nearest curve.'],
@@ -347,6 +349,9 @@ export function App() {
   const [showAxes, setShowAxes] = useState(true);
   const [showStart, setShowStart] = useState(() => { try { return localStorage.getItem('forge-show-start') !== 'false'; } catch { return true; } }); // the message and demo button on an empty design
   useEffect(() => { try { localStorage.setItem('forge-show-start', String(showStart)); } catch { /* Storage may be unavailable. */ } }, [showStart]);
+  const [planeSheets, setPlaneSheets] = useState(() => { try { return localStorage.getItem('forge-plane-sheets') !== 'false'; } catch { return true; } }); // the origin planes drawn as sheets while a sketch plane is chosen
+  useEffect(() => { try { localStorage.setItem('forge-plane-sheets', String(planeSheets)); } catch { /* Storage may be unavailable. */ } }, [planeSheets]);
+  const [hoverPlane, setHoverPlane] = useState<string | null>(null);
   const [showPrefs, setShowPrefs] = useState(false);
   const [showStartPage, setShowStartPage] = useState(false); // the full Start page over the design (the Home button)
   const [recents, setRecents] = useState<RecentItem[]>([]);
@@ -420,13 +425,39 @@ export function App() {
       setFontNames([...new Set(list.map((f) => f.family))].sort((a, b) => a.localeCompare(b)));
     } catch { setError('Listing the installed fonts was not allowed: type the font name instead'); }
   };
+  /** The Text step for what is in the box, or null while it cannot be made (no text yet, or a height that is not above 0). */
+  const textStepOf = (t: TextForm) => {
+    const h = Number(t.height); if (!t.text.trim() || !(h > 0)) return null;
+    return { command: 'sketch.text', params: { text: t.text, at: t.at, height: h, ...(t.font.trim() ? { font: t.font.trim() } : {}), ...(t.bold ? { bold: true } : {}), ...(t.italic ? { italic: true } : {}), align: t.align } };
+  };
+  // the letters show in the sketch while the box is open: the step is made, and taken back and made again as the box changes
+  const textPrev = useRef<{ applied: boolean; key: string }>({ applied: false, key: '' });
+  useEffect(() => {
+    if (!textDlg) return;
+    const step = textStepOf(textDlg), key = JSON.stringify(step);
+    const timer = setTimeout(() => {
+      if (key === textPrev.current.key) return;
+      const had = textPrev.current.applied;
+      if (!had && !step) { textPrev.current.key = key; return; }
+      void run(async () => { if (had) await api.undo(); return step ? api.batch([step]) : api.state(); }).then((s) => { textPrev.current = { applied: !!s && !!step, key: s ? key : '' }; });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [textDlg]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Close the Text box; unless it is kept, the letters shown as a preview are taken back. */
+  const closeText = (keep: boolean) => {
+    const had = textPrev.current.applied; textPrev.current = { applied: false, key: '' };
+    setTextDlg(null); if (keep) return;
+    if (had) void run(async () => { await api.undo(); return api.state(); });
+  };
   const placeText = async () => {
     const t = textDlg; if (!t) return;
-    const h = Number(t.height);
+    const step = textStepOf(t);
     if (!t.text.trim()) { setError('Type the text first'); return; }
-    if (!(h > 0)) { setError('The height must be above 0 (it is the height of a capital letter, in mm)'); return; }
-    const s = await run(() => api.batch([{ command: 'sketch.text', params: { text: t.text, at: t.at, height: h, ...(t.font.trim() ? { font: t.font.trim() } : {}), ...(t.bold ? { bold: true } : {}), ...(t.italic ? { italic: true } : {}), align: t.align } }]));
-    if (s) { setTextDlg(null); setTool(null); }
+    if (!step) { setError('The height must be above 0 (it is the height of a capital letter, in mm)'); return; }
+    if (textPrev.current.applied && textPrev.current.key === JSON.stringify(step)) { closeText(true); setTool(null); return; } // what is on show is what was asked for
+    const had = textPrev.current.applied;
+    const s = await run(async () => { if (had) await api.undo(); return api.batch([step]); });
+    if (s) { textPrev.current = { applied: false, key: '' }; setTextDlg(null); setTool(null); } else textPrev.current.applied = false;
   };
   const numsOf = (t: string) => t.split(/[,\s]+/).filter(Boolean).map(Number);
   /** The middle of the selected curves' box: what Move and Scale turn and grow about. */
@@ -1438,7 +1469,7 @@ export function App() {
         else if (L.exportDlg) setExportDlg(null);
         else if (L.showStartPage) setShowStartPage(false);
         else if (L.showPrefs) setShowPrefs(false);
-        else if (L.textDlg) setTextDlg(null);
+        else if (L.textDlg) closeText(false);
         else if (L.menu) setMenu(null);
         else if (L.edit) setEdit(null);
         else if (L.mode === 'extrude') void A.cancelExtrude();
@@ -1497,7 +1528,7 @@ export function App() {
   const triangles = snap.bodies.reduce((n, b) => n + b.faceIds.length, 0);
   const placeholder = tool === 'rect' || tool === 'rectCenter' ? 'width, height' : tool === 'rectRound' ? 'width, height, radius' : tool === 'polyIn' || tool === 'polyOut' ? 'radius [, angle]' : tool === 'circle' || tool === 'circle2' ? 'diameter' : tool === 'slot' ? 'width' : 'length [, angle]';
   const fieldNames = tool === 'rect' || tool === 'rectCenter' ? ['Width', 'Height'] : tool === 'circle' || tool === 'circle2' ? ['Diameter'] : tool === 'slot' ? ['Width'] : ['Length', 'Angle'];
-  const typable = isDraw(tool) && pending.length > 0 && ['line', 'rect', 'rectCenter', 'circle', 'circle2', 'rectRound', 'polyIn', 'polyOut'].includes(tool as string) || (tool === 'slot' && pending.length >= 2);
+  const typable = isDraw(tool) && pending.length > 0 && ['line', 'rect', 'rectCenter', 'circle', 'circle2', 'rectRound', 'polyIn', 'polyOut', 'lineMid'].includes(tool as string) || (tool === 'slot' && pending.length >= 2);
 
   return (
     <div className="app">
@@ -1522,9 +1553,9 @@ export function App() {
         onSetParam={async (name, value) => !!(await run(() => api.param(name, value)))}
         selectedBodies={bodySel} renaming={renaming} onSelectBody={selectBody} onStartRename={(n) => { setBodySel2([n]); setRenaming(n); }} onRenameBody={(a, b) => void renameBody(a, b)} onBodyMenu={(n, x, y) => { if (!bodySel.includes(n)) setBodySel2([n]); setBodyMenu({ x, y, name: n }); }} />
 
-      <div className="stage">
+      <div className={`stage${mode === 'sketch' && tool === 'text' ? ' cur-text' : mode === 'sketch' && tool && (isDraw(tool) || tool === 'break' || tool === 'chamfer') ? ' cur-cross' : ''}`}>
         <Viewport bodies={snap.bodies} sketches={snap.sketches} activeSketch={activeSketch} theme={theme} mode={mode} tool={tool} pending={pending}
-          hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} constPlanes={snap.planes} hiddenPlanes={hiddenPlanes} showGrid={showGrid} showAxes={showAxes} showDims={showDims} onDimEdit={dimEdited} showEdges={showEdges} showProfiles={showProfiles} snap={snapOn}
+          hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} constPlanes={snap.planes} hiddenPlanes={hiddenPlanes} planeSheets={planeSheets} hoverPlane={hoverPlane} showGrid={showGrid} showAxes={showAxes} showDims={showDims} onDimEdit={dimEdited} showEdges={showEdges} showProfiles={showProfiles} snap={snapOn}
           selectedFaces={mode === 'modify' ? facesSel : measure ? measure.flatMap((m) => (m.kind === 'face' ? [{ body: m.body, face: m.face }] : [])) : sel ? [sel] : []} pickFaces={mode === 'modify' && (FACE_TOOLS.includes(modTool) || BODY_TOOLS.includes(modTool) || PRIM_TOOLS.includes(modTool) || PLANE_TOOLS.includes(modTool))} selectedBodies={mode === 'modify' ? bodiesSel : mode === 'model' ? bodySel : []} onBodyPick={selectBody} selectedProfiles={profiles}
           handle={dragHandle} handles={moveHandles} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setSel(f); setProfiles([]); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
           pickMode={mode !== 'sketch' ? null : !tool ? 'curve' : isDraw(tool) ? null : PICK_MODE[tool]} highlight={[...selected, ...picks.map((q) => q.id), ...(offsetPick ? [offsetPick] : [])]} showPoints={mode === 'sketch' && !!tool && !isDraw(tool) && PICK_MODE[tool] !== 'curve'}
@@ -1544,13 +1575,14 @@ export function App() {
           <div className="dialog plane-picker" role="region" aria-label="Select sketch plane" data-testid="plane-picker">
             <div className="dhead">Select sketch plane</div>
             <div className="dnote">Choose an origin or construction plane, or click a flat face.</div>
-            {(['XY', 'XZ', 'YZ'] as const).map((plane) => <button key={plane} data-testid={`pick-plane-${plane}`} onClick={() => planePicked({ plane })}>{plane} / {plane === 'XY' ? 'Top' : plane === 'XZ' ? 'Front' : 'Side'}</button>)}
-            {snap.planes.map((c) => <button key={c.name} data-testid={`pick-plane-${c.name}`} onClick={() => planePicked({ plane: c.name })}>{c.name} (construction)</button>)}
+            {(['XY', 'XZ', 'YZ'] as const).map((plane) => <button key={plane} data-testid={`pick-plane-${plane}`} onMouseEnter={() => setHoverPlane(plane)} onMouseLeave={() => setHoverPlane(null)} onClick={() => { setHoverPlane(null); planePicked({ plane }); }}>{plane} / {plane === 'XY' ? 'Top' : plane === 'XZ' ? 'Front' : 'Side'}</button>)}
+            {snap.planes.map((c) => <button key={c.name} data-testid={`pick-plane-${c.name}`} onClick={() => { setHoverPlane(null); planePicked({ plane: c.name }); }}>{c.name} (construction)</button>)}
             <button onClick={() => setMode('model')}>Cancel</button>
           </div>
         )}
         {mode === 'sketch' && (
           <div className="palette" data-testid="palette">
+            <ToolOptions tool={tool} onTool={chooseTool} sides={sides} onSides={setSides} />
             <div className="phead">SKETCH PALETTE</div>
             <label><span>Dimensions</span><input type="checkbox" aria-label="Dimensions" checked={showDims} onChange={(e) => setShowDims(e.target.checked)} /></label>
             <label><span>Sketch Grid</span><input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /></label>
@@ -1644,14 +1676,16 @@ export function App() {
             <label className="drow"><span>Height</span><input aria-label="Text height" type="text" value={textDlg.height} onChange={(e) => setTextDlg({ ...textDlg, height: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') void placeText(); }} /></label>
             <label className="drow"><span>Align</span><select aria-label="Text align" value={textDlg.align} onChange={(e) => setTextDlg({ ...textDlg, align: e.target.value as TextForm['align'] })}><option value="left">Left</option><option value="center">Centre</option><option value="right">Right</option></select></label>
             <div className="drow"><span>Style</span><span><label><input type="checkbox" aria-label="Bold" checked={textDlg.bold} onChange={(e) => setTextDlg({ ...textDlg, bold: e.target.checked })} /> Bold</label> <label><input type="checkbox" aria-label="Italic" checked={textDlg.italic} onChange={(e) => setTextDlg({ ...textDlg, italic: e.target.checked })} /> Italic</label></span></div>
-            <div className="dnote">The height is a capital letter's height in mm. Any font installed on this computer works: type its name (Arial, Segoe UI, Impact…). Leave it empty for the built-in font. The letters become sketch shapes you can extrude or cut.</div>
-            <div className="dbtns"><button onClick={() => setTextDlg(null)}>Cancel</button><button className="primary" data-testid="text-ok" onClick={() => void placeText()}>OK</button></div>
+            <div className="dnote">The height is a capital letter's height in mm. Any font installed on this computer works: type its name (Arial, Segoe UI, Impact…). Leave it empty for the built-in font. The letters show in the sketch as you type (a moment after you stop). They are sketch shapes you can extrude or cut.</div>
+            <div className="dbtns"><button onClick={() => closeText(false)}>Cancel</button><button className="primary" data-testid="text-ok" onClick={() => void placeText()}>OK</button></div>
           </div>
         )}
         {showPrefs && (
           <div className="dialog" data-testid="prefs-dialog" role="dialog" aria-label="Preferences">
             <div className="dhead">PREFERENCES</div>
             <label className="drow"><span>Show initial start options</span><input type="checkbox" aria-label="Show initial start options" data-testid="pref-show-start" checked={showStart} onChange={(e) => setShowStart(e.target.checked)} /></label>
+            <label className="drow"><span>Draw the origin planes when choosing a sketch plane</span><input type="checkbox" aria-label="Draw the origin planes when choosing a sketch plane" data-testid="pref-plane-sheets" checked={planeSheets} onChange={(e) => setPlaneSheets(e.target.checked)} /></label>
+            <div className="dnote">Off: the planes show only while the pointer is on their button in the list, so every face of the part stays open to click. Faces are always picked before a plane sheet.</div>
             <div className="dnote">The Start page (new, open, recent designs, samples) shown in place of an empty view. Turn this off for a clean, empty view. The Home button next to the logo still opens it. Remembered on this computer.</div>
             <div className="dbtns"><button className="primary" data-testid="prefs-close" onClick={() => setShowPrefs(false)}>Done</button></div>
           </div>

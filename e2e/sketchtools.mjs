@@ -19,6 +19,7 @@ const click = async (q) => { const [x, y] = await at(q); await p.mouse.move(x, y
 const proj = (w) => p.evaluate((w) => window.__forge.project(w), w);
 const waitCurves = async (n) => { for (let i = 0; i < 40; i++) { if ((await sketch()).curves.length >= n) return true; await settle(250); } return false; };
 const areas = async () => (await sketch()).profiles.map((q) => q.area);
+const until = async (f, n = 30) => { for (let i = 0; i < n; i++) { if (await f()) return true; await settle(250); } return false; };
 const near = (a, v, tol = 0.02) => Math.abs(a - v) <= Math.abs(v) * tol;
 const has = async (v) => { for (let i = 0; i < 24; i++) { if ((await areas()).some((a) => near(a, v))) return true; await settle(250); } return false; };
 
@@ -52,7 +53,7 @@ await p.getByTestId('polygon-sides').fill('5');
 await pick(p, 'tool-polyIn'); await click([120, 60]); await click([140, 60]);
 check(await has(0.5 * 5 * 400 * Math.sin((2 * Math.PI) / 5)), 'Inscribed Polygon: 5 sides, radius 20 to the corners', JSON.stringify(await areas()));
 await p.getByTestId('polygon-sides').fill('6');
-await pick(p, 'tool-polyOut'); await click([150, -40]); await click([170, -40]);
+await pick(p, 'tool-polyOut'); await click([-100, 60]); await click([-80, 60]);
 check(await has(6 * 20 * 20 * Math.tan(Math.PI / 6)), 'Circumscribed Polygon: 6 sides, 20 to the middle of the sides', JSON.stringify(await areas()));
 await p.getByTestId('polygon-sides').fill('4');
 await pick(p, 'tool-polyEdge'); await click([0, 100]); await click([20, 100]);
@@ -61,6 +62,16 @@ check(await has(400), 'Edge Polygon: a square on an edge of 20, above the way it
 // ---- ellipse: centre (60,110), long axis to (80,110), short side to (60,120): 20 x 10
 await pick(p, 'tool-ellipse'); await click([60, 110]); await click([80, 110]); await click([60, 120]);
 check(await has(Math.PI * 200), 'Ellipse: 20 x 10 half-axes', JSON.stringify(await areas()));
+
+// ---- the options strip above the sketch: the sisters of the chosen tool are one click away
+await p.getByTestId('tool-rect').click(); await settle(300);
+check(await p.getByTestId('tool-options').isVisible() && await p.getByTestId('opt-rectRound').isVisible(), 'choosing a rectangle tool shows the strip with the other rectangles');
+await p.getByTestId('opt-rect3').click(); await settle(200);
+check(await p.getByTestId('opt-rect3').getAttribute('aria-pressed') === 'true', 'a click in the strip switches the tool');
+await p.getByTestId('tool-line').click(); await p.getByTestId('opt-lineMid').click();
+const linesBefore = (await sketch()).curves.filter((c) => c.type === 'line').length;
+await click([-60, -20]); await click([-40, -20]); // the middle at (-60,-20), one end at (-40,-20)
+check(await until(async () => { const l = (await sketch()).curves.filter((c) => c.type === 'line'); return l.length === linesBefore + 1 && l.some((q) => Math.abs(Math.min(q.start[0], q.end[0]) + 80) < 1e-6 && Math.abs(Math.max(q.start[0], q.end[0]) + 40) < 1e-6); }), 'Midpoint Line: the other end is the same distance the other way (-80 to -40)');
 
 // ---- point
 const pointsBefore = (await sketch()).points.length;

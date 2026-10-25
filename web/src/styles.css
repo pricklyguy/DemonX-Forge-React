@@ -190,3 +190,11 @@ header button.docname:hover:not(:disabled), header button.docname:focus-visible 
 .snav hr { border: none; border-top: 1px solid var(--line); margin: 8px 4px; width: 100%; }
 .smain { flex: 1; overflow: auto; padding: 24px 36px; } .smain .startbody { width: min(980px, 100%); }
 .homebtn { background: none; border: none; padding: 0 6px; font-size: 18px; color: var(--text); } .homebtn:hover { color: var(--accent); }
+
+.stage.cur-text canvas { cursor: text; } .stage.cur-cross canvas { cursor: crosshair; }
+
+.toolopts { width: 200px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 0 8px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.toolopts .toname { flex-basis: 100%; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+ .toolopts button { width: 34px; height: 30px; padding: 0; display: grid; place-items: center; } .toolopts button svg { width: 22px; height: 22px; }
+.toolopts button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.toolopts .toline { flex-basis: 100%; font-size: 12px; color: var(--muted); } .toolopts .tosides input { width: 48px; }

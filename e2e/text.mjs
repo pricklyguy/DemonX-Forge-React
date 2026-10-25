@@ -27,10 +27,18 @@ await p.mouse.wheel(0, 300); await settle(400);
 
 await pick(p, 'tool-text'); await click([0, 0]);
 check(await p.getByTestId('text-dialog').isVisible(), 'the Text tool opens its box where you click');
+check(await p.evaluate(() => getComputedStyle(document.querySelector('.stage canvas')).cursor) === 'text', 'the pointer is a text cursor while the tool is chosen');
+const c0 = (await sketch()).curves.length;
 await p.getByLabel('Text', { exact: true }).fill('Hi'); await p.getByLabel('Text height').fill('10');
+check(await until(async () => (await sketch()).curves.length > c0 + 8), 'the letters show in the sketch while the box is still open (preview)', String((await sketch()).curves.length - c0));
+await p.getByRole('button', { name: 'Cancel' }).click(); await settle(1200);
+check((await sketch()).curves.length === c0, 'Cancel takes the preview back');
+await click([0, 0]); await p.getByLabel('Text', { exact: true }).fill('Hi'); await p.getByLabel('Text height').fill('10'); await settle(1500);
 await p.getByTestId('text-ok').click();
 check(await until(async () => (await sketch()).profiles.length >= 1 && (await sketch()).curves.length > 8), 'OK turns the text into sketch shapes you can extrude', `${(await sketch()).curves.length} curves, ${(await sketch()).profiles.length} profiles`);
 check(!(await p.getByTestId('text-dialog').isVisible().catch(() => false)), 'and the box closes');
+const shown = await p.evaluate(() => [...document.querySelectorAll('.dimlabel.measured')].filter((e) => getComputedStyle(e).display !== 'none').length);
+check(shown < 6, 'the tiny lengths along the letters do not each get a label', String(shown));
 
 const before = (await sketch()).curves.length;
 await pick(p, 'tool-text'); await click([0, 30]);
