@@ -33,6 +33,7 @@ Each script says in its header how to run it. They need the real engine, a built
 | `sketchmodify.mjs` | sketch Chamfer, Break, Move / Copy, Scale, Mirror, Circular and Rectangular Pattern, Collinear, Symmetry, AutoConstrain, Insert DXF and SVG (needs a fresh server) |
 | `text.mjs` | the Text tool: placing text, a font by name, a missing font (refused, box stays open), a font file path (refused) (needs a fresh server) |
 | `construct.mjs` | Offset Plane (origin plane and clicked face), Plane at Angle, Midplane, the Construction folder, sketching on a construction plane (needs a fresh server) |
+| `start.mjs` | the Start page: empty-design page, sample, Home overlay and Esc, Recent after a save (with a picture), kept across a reload, opening and removing from the list (needs a fresh server) |
 | `prefs.mjs` | File > Preferences: Show initial start options off removes the empty-design message and the demo button, and it is remembered (needs a fresh server) |
 | `snap.mjs` | the face under the pointer lights up when choosing a sketch plane; Extrude and Press Pull reach another face's height by clicking it (needs a fresh server) |
 | `strip.mjs` | a strip sketched along a face's edge (lines on top of the face outline): two shapes, clicking the strip, extruding it; orbiting past the top view (needs a fresh server) |

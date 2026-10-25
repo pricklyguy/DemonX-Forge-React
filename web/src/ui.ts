@@ -15,5 +15,7 @@ export interface ViewApi {
   setView(name: 'home' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right'): void;
   /** Camera orientation as a row-major 3x3 world-to-camera rotation. */
   rotation(): number[];
+  /** A small picture of the model as it is drawn now (for the Start page), or null when there is nothing to draw. */
+  thumbnail(): string | null;
 }
 export type { Tool };

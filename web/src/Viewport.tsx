@@ -566,7 +566,8 @@ export function Viewport(props: Props) {
       const dist = Math.max(cam.position.distanceTo(ctl.target), 60);
       ctl.target.copy(v3(pl.origin)); cam.position.copy(v3(pl.origin)).add(n.multiplyScalar(dist)); ctl.update();
     };
-    P.current.apiRef.current = { focusSize: (i: number, first?: string) => { const x = liveInputs[i]; if (!x) return false; x.focus(); if (first !== undefined) { x.value = first; P.current.onSizeTyped?.(i, first); } else x.select(); return true; }, fit, setView: (n) => setView(n), rotation: () => { const m = cam.matrixWorldInverse.elements; return [m[0]!, m[4]!, m[8]!, m[1]!, m[5]!, m[9]!, m[2]!, m[6]!, m[10]!]; } };
+    P.current.apiRef.current = { focusSize: (i: number, first?: string) => { const x = liveInputs[i]; if (!x) return false; x.focus(); if (first !== undefined) { x.value = first; P.current.onSizeTyped?.(i, first); } else x.select(); return true; }, fit, setView: (n) => setView(n), thumbnail: () => { if (!gBodies.children.length) return null; try { renderer.render(scene, cam); const w = 192, h = 120, c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); if (!g) return null; g.fillStyle = css('--canvas'); g.fillRect(0, 0, w, h); const sw = dom.width, sh = dom.height, k = Math.max(w / sw, h / sh); g.drawImage(dom, (sw - w / k) / 2, (sh - h / k) / 2, w / k, h / k, 0, 0, w, h); return c.toDataURL('image/jpeg', 0.72); } catch { return null; } },
+      rotation: () => { const m = cam.matrixWorldInverse.elements; return [m[0]!, m[4]!, m[8]!, m[1]!, m[5]!, m[9]!, m[2]!, m[6]!, m[10]!]; } };
 
     // ---- picking and pointer handling
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();

@@ -3,6 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { buildEdgeGeometry } from '../../server/src/engine/meshEdges';
 import { api, type Snapshot, type Sketch, type SketchCurve, type TimelineItem, type Vec2, type Vec3 } from './api';
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { Start } from './Start';
+import { addRecent, listRecents, removeRecent, type RecentItem } from './recent';
 import { ExportDialog, type ExportChoice, type SlicerInfo } from './ExportDialog';
 import { Browser } from './Browser';
 import { canPick, download, extOf, FORGE_TYPE, MODEL_TYPE, pickOpenFile, pickSaveHandle, stripExt, typeForExt, writeHandle, type Handle } from './files';
@@ -346,6 +348,9 @@ export function App() {
   const [showStart, setShowStart] = useState(() => { try { return localStorage.getItem('forge-show-start') !== 'false'; } catch { return true; } }); // the message and demo button on an empty design
   useEffect(() => { try { localStorage.setItem('forge-show-start', String(showStart)); } catch { /* Storage may be unavailable. */ } }, [showStart]);
   const [showPrefs, setShowPrefs] = useState(false);
+  const [showStartPage, setShowStartPage] = useState(false); // the full Start page over the design (the Home button)
+  const [recents, setRecents] = useState<RecentItem[]>([]);
+  useEffect(() => { void listRecents().then(setRecents); }, []);
   useEffect(() => { try { localStorage.setItem('forge-grid', String(showGrid)); } catch { /* Storage may be unavailable. */ } }, [showGrid]);
   const [showDims, setShowDims] = useState(true); // the sizes shown on a sketch (Sketch Palette > Dimensions)
   const [showEdges, setShowEdges] = useState(true);
@@ -1090,6 +1095,23 @@ export function App() {
     setHiddenBodies(new Set()); setHiddenSketches(new Set());
     setTimeout(() => viewApi.current?.setView('home'), 80);
   };
+  /** Put a design on the Start page's list, with a picture of it as drawn now (or a little later, once a freshly opened one is on screen). */
+  const remember = async (name: string, handle: Handle | null, wait = 0) => {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    const thumb = viewApi.current?.thumbnail() ?? null;
+    setRecents(await addRecent({ id: name.toLowerCase(), name, ts: Date.now(), thumb, handle }));
+  };
+  const openRecent = (r: RecentItem) => guardUnsaved(() => { void (async () => {
+    try {
+      const h = r.handle as (Handle & { requestPermission?: (o: { mode: string }) => Promise<string> }) | null;
+      if (!h) { setShowStartPage(false); doOpen(); return; } // no file kept (the browser could not): choose it again
+      if (h.requestPermission && (await h.requestPermission({ mode: 'readwrite' })) !== 'granted') { setError('Forge was not allowed to read that file: use Open… and choose it'); return; }
+      await noPreviewPending();
+      const file = await h.getFile(), data = await file.arrayBuffer();
+      const s = await run(() => api.open(data, stripExt(file.name)));
+      if (s) { fileHandle.current = h; resetAfterLoad(); setShowStartPage(false); setNotice(`Opened ${file.name}`); void remember(stripExt(file.name), h, 1400); }
+    } catch (e) { setError(`That file could not be opened (${(e as Error).message}). Use Open… and choose it.`); }
+  })(); });
   const guardUnsaved = (go: () => void) => { if (snap.doc.dirty) setConfirm({ text: 'Discard the unsaved changes?', label: 'Discard', ok: () => { setConfirm(null); go(); } }); else go(); };
   const doNew = () => guardUnsaved(() => { void (async () => {
     await noPreviewPending();
@@ -1103,7 +1125,7 @@ export function App() {
       if (!picked) return;
       const data = await picked.file.arrayBuffer();
       const s = await run(() => api.open(data, stripExt(picked.file.name)));
-      if (s) { fileHandle.current = picked.handle; resetAfterLoad(); setNotice(`Opened ${picked.file.name}`); }
+      if (s) { fileHandle.current = picked.handle; resetAfterLoad(); setNotice(`Opened ${picked.file.name}`); setShowStartPage(false); void remember(stripExt(picked.file.name), picked.handle, 1400); }
     } catch (e) { setError((e as Error).message); }
   })(); });
   /** File > Import: a STEP, IGES, STL, OBJ or 3MF file becomes a new component in the design (it does not replace it). */
@@ -1158,6 +1180,7 @@ export function App() {
     } else download(blob, filename);
     setNotice(`Saved ${target ? target.name : filename}`);
     await run(api.state); // the name and the unsaved marker
+    void remember(target ? stripExt(target.name) : name, target);
   };
   const doSave = async (saveAs: boolean) => {
     if (mode === 'extrude' || mode === 'modify') { setError('Finish or cancel the open dialog first, then save.'); return; }
@@ -1375,8 +1398,8 @@ export function App() {
 
   // ---- keyboard (the same letters Fusion users know)
   const showKeysRef = useRef(false); showKeysRef.current = showKeys;
-  const latest = useRef({ textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline });
-  latest.current = { textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline };
+  const latest = useRef({ showStartPage, textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline });
+  latest.current = { showStartPage, textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline };
   // Another program (an AI client connected through MCP) can change the design while the page is open: notice it, when nothing here is half done
   const watch = useRef({ mode, busy, stamp: snap.stamp, dialogs: false });
   watch.current = { mode, busy, stamp: snap.stamp, dialogs: !!(placeImport || confirm || showUpdates || showKeys || section || edit) };
@@ -1413,6 +1436,7 @@ export function App() {
         if (inField) (e.target as HTMLElement).blur();
         if (L.confirm) setConfirm(null);
         else if (L.exportDlg) setExportDlg(null);
+        else if (L.showStartPage) setShowStartPage(false);
         else if (L.showPrefs) setShowPrefs(false);
         else if (L.textDlg) setTextDlg(null);
         else if (L.menu) setMenu(null);
@@ -1479,6 +1503,7 @@ export function App() {
     <div className="app">
       <header>
         <span className="brand" data-testid="brand" aria-label="DemonX Forge"><img className="brand-mark" src="/forge-mark.png" alt="" width="60" height="38" /><img className="brand-name" src="/forge-wordmark.png" alt="DemonX Forge" width="185" height="34" /></span>
+        <button className="homebtn" data-testid="home-button" aria-label="Start page" title="Start page: new, open, recent" onClick={() => { setShowStartPage(true); void listRecents().then(setRecents); }}>⌂</button>
         <button data-testid="file-menu" aria-haspopup="menu" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setFileMenu({ x: r.left, y: r.bottom + 2 }); }}>File ▾</button>
         <button className="docname" data-testid="docname" title="Save design (Ctrl+S)" aria-label={`Save ${snap.doc.name}`} disabled={busy} onClick={() => void doSave(!fileHandle.current && snap.doc.name === 'Untitled')}>{snap.doc.name}{snap.doc.dirty && <span className="dirty" data-testid="dirty" title="Unsaved changes">●</span>}</button>
         <span className="spacer" />
@@ -1627,7 +1652,7 @@ export function App() {
           <div className="dialog" data-testid="prefs-dialog" role="dialog" aria-label="Preferences">
             <div className="dhead">PREFERENCES</div>
             <label className="drow"><span>Show initial start options</span><input type="checkbox" aria-label="Show initial start options" data-testid="pref-show-start" checked={showStart} onChange={(e) => setShowStart(e.target.checked)} /></label>
-            <div className="dnote">The hint and the "Load the demo bracket" button shown while a design is empty. Turn this off for a clean, empty view. Remembered on this computer.</div>
+            <div className="dnote">The Start page (new, open, recent designs, samples) shown in place of an empty view. Turn this off for a clean, empty view. The Home button next to the logo still opens it. Remembered on this computer.</div>
             <div className="dbtns"><button className="primary" data-testid="prefs-close" onClick={() => setShowPrefs(false)}>Done</button></div>
           </div>
         )}
@@ -1683,9 +1708,8 @@ export function App() {
         {mode === 'model' && face && (
           <div className="seltip" data-testid="selection">Face {face.index} · {face.planeNormal ? 'plane' : face.cylinder ? `cylinder R${face.cylinder.radius.toFixed(2)}` : 'other'} · area ≈ {face.area.toFixed(1)} mm²</div>
         )}
-        {mode === 'model' && snap.bodies.length === 0 && snap.sketches.length === 0 && showStart && (
-          <div className="empty"><div><p>Nothing modelled yet.</p><p className="muted">Press Create Sketch, pick a plane, draw a shape, Finish Sketch, then Extrude (E).</p>
-            <button disabled={busy} data-testid="demo" onClick={() => void run(api.demo)}>Load the demo bracket</button></div></div>
+        {mode === 'model' && snap.bodies.length === 0 && snap.sketches.length === 0 && showStart && !showStartPage && (
+          <Start recents={recents} busy={busy} onNew={doNew} onOpen={doOpen} onImport={doImport} onDemo={() => void run(api.demo)} onRecent={openRecent} onForget={(r) => void removeRecent(r.id).then(setRecents)} />
         )}
       </div>
 
@@ -1694,6 +1718,13 @@ export function App() {
       {showKeys && <ShortcutsDialog onClose={() => setShowKeys(false)} />}
       {showUpdates && <UpdatesDialog info={upd.info} error={upd.error} dirty={snap.doc.dirty} act={upd.act} onClose={() => setShowUpdates(false)} />}
       {viewMenu && <ContextMenu x={viewMenu.x} y={viewMenu.y} items={viewItems()} onClose={() => setViewMenu(null)} />}
+      {showStartPage && (
+        <Start recents={recents} busy={busy} overlay={{ docName: snap.doc.name, canSave: !busy }} onClose={() => setShowStartPage(false)}
+          onNew={() => { setShowStartPage(false); doNew(); }} onOpen={() => doOpen()} onImport={() => { setShowStartPage(false); doImport(); }} onDemo={() => { setShowStartPage(false); void run(api.demo); }}
+          onRecent={openRecent} onForget={(r) => void removeRecent(r.id).then(setRecents)}
+          onSave={() => { setShowStartPage(false); void doSave(false); }} onSaveAs={() => { setShowStartPage(false); void doSave(true); }}
+          onPrefs={() => { setShowStartPage(false); setShowPrefs(true); }} onKeys={() => { setShowStartPage(false); setShowKeys(true); }} onUpdates={() => { setShowStartPage(false); setShowUpdates(true); void upd.refresh(); }} />
+      )}
       {planeMenu && <ContextMenu x={planeMenu.x} y={planeMenu.y} items={planeMenuItems(planeMenu.name)} onClose={() => setPlaneMenu(null)} />}
       {bodyMenu && <ContextMenu x={bodyMenu.x} y={bodyMenu.y} items={bodyMenuItems(bodyMenu.name)} onClose={() => setBodyMenu(null)} />}
       {fileMenu && <ContextMenu x={fileMenu.x} y={fileMenu.y} items={fileItems()} onClose={() => setFileMenu(null)} />}

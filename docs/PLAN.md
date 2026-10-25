@@ -116,6 +116,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **0.32.0 (2026-10-25):** Text (system fonts by name, never a file: `checkStep` refuses font paths; the font list comes from the browser's `queryLocalFonts`), and Construction planes. `Snapshot.planes` is built in `server/src/engine/constructPlanes.ts` from `timeline.inspect` definitions (offset, at angle, midplane; frames checked against the engine in `server/test/constructPlanes.test.ts`); the generic route now allows `construct.*`. Guide: `docs/guides/construct-planes.md`. Left: three-point / two-edge / path / tangent planes, axes and points, editing a plane from the timeline, editing placed text, Project / Intersect.
 
+**0.33.0 (2026-10-26):** Start page (`web/src/Start.tsx`) in place of the empty-design note, and as an overlay from the Home button; Recent list in IndexedDB (`web/src/recent.ts`: name, time, a 192x120 picture from the viewport, and the file handle where the browser allows). **Design types:** Forge has one kind of design (bodies, sketches, a timeline; the engine's components and joints are not exposed), which is the nearest thing to Fusion's Part design. Assembly / Hybrid would need Components in the browser, Insert Design, Joints. **PCB / Electronics / Drawing:** not in the SolidCraft engine (its roadmap lists PCB and Drawings as deferred); a separate project if ever wanted (DemonX Design already does 2D drawings and exports DXF).
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.
