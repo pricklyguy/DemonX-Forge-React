@@ -12,6 +12,9 @@ function Svg({ children, size }: { children: ReactNode; size?: number }) {
 export const Icon = {
   sketch: () => <Svg><rect x="4" y="8" width="16" height="16" rx="1.5" /><path d="M14 14 L23 5 L26 8 L17 17 L13.5 17.5 Z" stroke={A} /></Svg>,
   extrude: () => <Svg><path d="M5 20 L14 24 L23 20 L23 12 L14 16 L5 12 Z" /><path d="M5 12 L14 8 L23 12" /><path d="M14 16 V3 M10.5 6.5 L14 3 L17.5 6.5" stroke={A} /></Svg>,
+  bBox: () => <Svg><path d="M14 4 L24 9 L24 19 L14 24 L4 19 L4 9 Z" /><path d="M4 9 L14 14 L24 9 M14 14 V24" stroke={A} /></Svg>,
+  bCylinder: () => <Svg><ellipse cx="14" cy="7" rx="8" ry="3.2" stroke={A} /><path d="M6 7 V21 C6 23.5 10 25 14 25 C18 25 22 23.5 22 21 V7" /></Svg>,
+  bSphere: () => <Svg><circle cx="14" cy="14" r="10" /><ellipse cx="14" cy="14" rx="10" ry="3.6" stroke={A} /></Svg>,
   hole: () => <Svg><path d="M3 12 L14 7 L25 12 L25 19 L14 24 L3 19 Z" /><ellipse cx="14" cy="14" rx="4.5" ry="2.6" stroke={A} /></Svg>,
   line: () => <Svg><path d="M5 22 L23 6" stroke={C} /><circle cx="5" cy="22" r="2" /><circle cx="23" cy="6" r="2" /></Svg>,
   rect: () => <Svg><rect x="5" y="8" width="18" height="12" stroke={C} /><circle cx="5" cy="8" r="1.6" /><circle cx="23" cy="20" r="1.6" /></Svg>,

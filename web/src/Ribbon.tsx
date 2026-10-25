@@ -22,10 +22,13 @@ interface Props {
   onPipe(): void;
   onEmboss(): void;
   onCoil(): void;
+  onBox(): void;
+  onCylinder(): void;
+  onSphere(): void;
   onScale(): void;
   canModify: boolean;
   /** The Modify tool whose dialog is open, if any. */
-  modTool: 'fillet' | 'chamfer' | 'presspull' | 'shell' | 'offsetface' | 'draft' | 'hole' | 'thread' | 'mirror' | 'rpattern' | 'cpattern' | 'combine' | 'move' | 'split' | 'scale' | 'coil' | 'meshconv' | null;
+  modTool: 'fillet' | 'chamfer' | 'presspull' | 'shell' | 'offsetface' | 'draft' | 'hole' | 'thread' | 'mirror' | 'rpattern' | 'cpattern' | 'combine' | 'move' | 'split' | 'scale' | 'coil' | 'meshconv' | 'box' | 'cylinder' | 'sphere' | null;
   onFillet(): void;
   onChamfer(): void;
   onPressPull(): void;
@@ -87,6 +90,9 @@ export function Ribbon(p: Props) {
     { id: 'btn-sketch', pinned: true, icon: <Icon.sketch />, label: 'Create Sketch', pressed: p.mode === 'pickPlane', onClick: p.onCreateSketch },
     { id: 'btn-extrude', pinned: true, icon: <Icon.extrude />, label: 'Extrude', keyHint: 'E', pressed: p.extKind === 'extrude', onClick: p.onExtrude },
     { id: 'btn-revolve', pinned: true, icon: <Icon.revolve />, label: 'Revolve', pressed: p.extKind === 'revolve', onClick: p.onRevolve },
+    { id: 'btn-box', pinned: true, icon: <Icon.bBox />, label: 'Box', pressed: p.modTool === 'box', onClick: p.onBox },
+    { id: 'btn-cylinder', pinned: true, icon: <Icon.bCylinder />, label: 'Cylinder', pressed: p.modTool === 'cylinder', onClick: p.onCylinder },
+    { id: 'btn-sphere', pinned: true, icon: <Icon.bSphere />, label: 'Sphere', pressed: p.modTool === 'sphere', onClick: p.onSphere },
     { id: 'btn-sweep', icon: <Icon.sweep />, label: 'Sweep', pressed: p.extKind === 'sweep', onClick: p.onSweep },
     { id: 'btn-loft', icon: <Icon.loft />, label: 'Loft', pressed: p.extKind === 'loft', onClick: p.onLoft },
     { id: 'btn-rib', icon: <Icon.rib />, label: 'Rib', pressed: p.extKind === 'rib', disabled: !p.canModify, onClick: p.onRib },

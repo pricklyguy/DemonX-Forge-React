@@ -106,6 +106,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **Engine moved to SolidCraft v0.19.0 (branch `engine-newer`, 2026-10-22):** `engine/SOLIDCRAFT_REF` now names the v0.19.0 commit (33fdcdb; it was f498d23, about v0.15). Built from source here (release, about 11 minutes); the whole unit suite (157, with the engine tests that skip without an engine) and all 31 `e2e/` scripts pass against it unchanged, so no adapter change was needed. Reason: the owner's full SolidCraft app (v0.19.0) sketches on a face where Forge's older engine said "this face can't keep an attachment". Forge now also falls back to an unattached sketch on that plane (0.26.0). Not yet tried: the Windows build of v0.19.0 (the Package workflow), and the owner's part that gave the refusal.
 
+**Direction (2026-10-25):** this app stays the product. The `codex/fusion-parity` branch (SolidCraft's native app with a DemonX cover) stays on its branch for reference and tinkering; nothing is merged from it except ideas and small fixes. See `docs/evaluation/ALTERNATE-BUILD.md` for what it has that we do not and the order to bring those over: 0.28.0 Box, Cylinder, Sphere; next body rename/select and per-body export (STL zip, 3MF) and open in slicer, then Construct planes, then more sketch tools.
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.
