@@ -17,7 +17,7 @@ import { segmentsTouchBox } from './sketch/box';
 import { lineChain, offsetChain, sideDistance } from './sketch/offsetChain';
 import { UpdateBadge, UpdatesDialog, useUpdates } from './Updates';
 import { curvePoints } from './sketch/loops';
-import { OPEN_ON_DRAG, PICK_MODE, applyTyped, constraintStep, dimensionFor, isDraw, onClick, sizeFields, type Tool } from './sketch/tools';
+import { OPEN_ON_DRAG, PICK_MODE, applyTyped, constraintStep, dimensionFor, isDraw, onClick, splineStep, drawOpts, sizeFields, type Tool } from './sketch/tools';
 import { pickEntity, type Picked } from './sketch/pick';
 import { inwardBisector } from './edgeDir';
 import { describe as describeItem, measureOne, measureTwo, type MeasureItem } from './measure';
@@ -71,6 +71,16 @@ const TOOL_HINT: Record<string, string[]> = {
   circle2: ['Click one end of the diameter.', 'Click the other end, or type a diameter.'],
   arc3: ['Click the start point.', 'Click the end point.', 'Click a point the arc passes through.'],
   slot: ['Click the centre of the first end.', 'Click the centre of the other end.', 'Click to set the width, or type it.'],
+  rect3: ['Click one end of the first edge.', 'Click the other end of the edge.', 'Click to set the width of the rectangle, or type it.'],
+  rectRound: ['Click the first corner.', 'Click the opposite corner, or type width,height,radius (the radius starts at a fifth of the shorter side).'],
+  circle3: ['Click a point on the circle.', 'Click a second point on it.', 'Click a third point on it.'],
+  arcC: ['Click the centre.', 'Click where the arc starts (or type the radius).', 'Click the way the arc ends: it runs counter-clockwise from the start.'],
+  polyIn: ['Click the centre.', 'Click a corner, or type the radius. The sides are set in the Sketch Palette.'],
+  polyOut: ['Click the centre.', 'Click the middle of a side, or type the radius. The sides are set in the Sketch Palette.'],
+  polyEdge: ['Click one end of a side.', 'Click the other end: the polygon stands on the left of the way you went. The sides are set in the Sketch Palette.'],
+  ellipse: ['Click the centre.', 'Click the end of the long axis.', 'Click a point on the short side.'],
+  point: ['Click where the point goes.'],
+  spline: ['Click the first point.', 'Click the next point.', 'Click more points. Enter, right-click or Esc ends the curve; clicking the first point closes it.'],
   trim: ['Click the piece of a line, arc or circle to remove, between its nearest crossings.'],
   extend: ['Click near the end of a line or arc to extend it to the nearest curve.'],
   offset: ['Click a curve (its connected chain is offset), then type the distance.'],
@@ -260,6 +270,8 @@ export function App() {
   const [hf, setHf] = useState<HoleForm>(HOLE_FORM);
   const [cf, setCf] = useState<CoilForm>(COIL_FORM);
   const [pf, setPf] = useState<PrimForm>(PRIM_FORM);
+  const [sides, setSides] = useState('6'); // the polygon tools' number of sides
+  useEffect(() => { const n = Math.round(Number(sides)); drawOpts.sides = Number.isFinite(n) && n >= 3 && n <= 64 ? n : 6; }, [sides]);
   const [bodySel, setBodySel2] = useState<string[]>([]); // whole bodies picked in the browser or by a double-click in the view
   const [renaming, setRenaming] = useState<string | null>(null);
   const [bodyMenu, setBodyMenu] = useState<{ x: number; y: number; name: string } | null>(null);
@@ -288,6 +300,9 @@ export function App() {
   const [showOrigin, setShowOrigin] = useState(false);
   const [showGrid, setShowGrid] = useState(() => { try { return localStorage.getItem('forge-grid') !== 'false'; } catch { return true; } });
   const [showAxes, setShowAxes] = useState(true);
+  const [showStart, setShowStart] = useState(() => { try { return localStorage.getItem('forge-show-start') !== 'false'; } catch { return true; } }); // the message and demo button on an empty design
+  useEffect(() => { try { localStorage.setItem('forge-show-start', String(showStart)); } catch { /* Storage may be unavailable. */ } }, [showStart]);
+  const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => { try { localStorage.setItem('forge-grid', String(showGrid)); } catch { /* Storage may be unavailable. */ } }, [showGrid]);
   const [showDims, setShowDims] = useState(true); // the sizes shown on a sketch (Sketch Palette > Dimensions)
   const [showEdges, setShowEdges] = useState(true);
@@ -442,7 +457,11 @@ export function App() {
     const cur = cursor ?? pending[pending.length - 1]!;
     applyResult(onClick(tool, pending, applyTyped(tool, pending, cur, sizes)));
   };
-  const endChain = () => { setPending([]); clearTyped(); setTool((t) => (t === 'line' ? null : t)); };
+  const endChain = () => {
+    const spline = tool === 'spline' ? splineStep(pending, false) : null;
+    if (spline) send([spline]); // right-click, Enter or Esc ends an open spline where it is
+    setPending([]); clearTyped(); setTool((t) => (t === 'line' || t === 'spline' ? null : t));
+  };
   /** The Dimension tool: a circle or arc is sized at once; a line is sized at once, or a second pick makes an angle or a distance; two points make a distance. */
   const dimClick = (sk: Sketch, hit: Picked) => {
     const done = () => setPicks([]);
@@ -1092,7 +1111,7 @@ export function App() {
     const face = sel ? snap.bodies.find((b) => b.name === sel.body)?.faces.find((f) => f.index === sel.face) : undefined;
     if (mode === 'sketch') {
       items.push({ label: 'Sketch', heading: true, onClick: () => {} }, { label: 'Finish Sketch', onClick: () => void finishSketch() });
-      for (const [label, t] of [['Line   L', 'line'], ['2-Point Rectangle   R', 'rect'], ['Center Rectangle', 'rectCenter'], ['Center Circle   C', 'circle'], ['2-Point Circle', 'circle2'], ['3-Point Arc   A', 'arc3'], ['Slot', 'slot'], ['Trim   T', 'trim'], ['Offset   O', 'offset'], ['Fillet', 'fillet'], ['Sketch Dimension   D', 'dimension']] as [string, Tool][]) items.push({ label, onClick: () => chooseTool(t) });
+      for (const [label, t] of [['Line   L', 'line'], ['2-Point Rectangle   R', 'rect'], ['Center Rectangle', 'rectCenter'], ['Center Circle   C', 'circle'], ['2-Point Circle', 'circle2'], ['3-Point Arc   A', 'arc3'], ['Slot', 'slot'], ['3-Point Rectangle', 'rect3'], ['Rounded Rectangle', 'rectRound'], ['3-Point Circle', 'circle3'], ['Center Point Arc', 'arcC'], ['Inscribed Polygon', 'polyIn'], ['Circumscribed Polygon', 'polyOut'], ['Edge Polygon', 'polyEdge'], ['Ellipse', 'ellipse'], ['Fit Point Spline', 'spline'], ['Point', 'point'], ['Trim   T', 'trim'], ['Offset   O', 'offset'], ['Fillet', 'fillet'], ['Sketch Dimension   D', 'dimension']] as [string, Tool][]) items.push({ label, onClick: () => chooseTool(t) });
     } else if (mode === 'model') {
       if (profiles.length) items.push({ label: 'Selected shape', heading: true, onClick: () => {} }, { label: 'Extrude   E', onClick: () => void startExtrude('extrude') }, { label: 'Revolve', onClick: () => void startExtrude('revolve') }, { label: 'Sweep', onClick: () => void startExtrude('sweep') }, { label: 'Loft', onClick: () => void startExtrude('loft') }, { label: 'Emboss', onClick: () => void startExtrude('emboss') });
       if (sel) items.push({ label: 'Selected face', heading: true, onClick: () => {} }, { label: 'Press Pull   Q', onClick: () => void startModify('presspull') }, { label: 'Hole   H', onClick: () => void startModify('hole') }, { label: 'Move / Copy   M', onClick: () => void startModify('move') }, { label: 'Offset Face', onClick: () => void startModify('offsetface') }, { label: 'Draft', onClick: () => void startModify('draft') }, { label: 'Shell', onClick: () => void startModify('shell') }, { label: 'Thread', disabled: !face?.cylinder, onClick: () => void startModify('thread') }, { label: 'Create Sketch on this face', disabled: !face?.planeNormal, onClick: () => planePicked({ face: sel.point, body: sel.body, index: sel.face }) }, { label: 'Export this face as DXF', disabled: !face?.planeNormal, onClick: () => void doExport('dxf', undefined, sel) });
@@ -1114,6 +1133,7 @@ export function App() {
       { label: 'Save   Ctrl+S', onClick: () => void doSave(false) },
       { label: 'Save As…   Ctrl+Shift+S', onClick: () => void doSave(true) },
       { label: 'Import STEP / IGES / STL…', onClick: doImport },
+      { label: 'Preferences…', onClick: () => { setFileMenu(null); setShowPrefs(true); } },
       { label: upd.info?.newer && !upd.info.skipped ? `Updates… (${upd.info.latest?.version} is available)` : 'Updates…', onClick: () => { setShowUpdates(true); void upd.refresh(); } },
       { label: 'Export bodies', heading: true, onClick: () => {} },
       { label: 'Choose bodies, one file each, or a slicer…', disabled: none, onClick: () => openExport(false) },
@@ -1219,8 +1239,8 @@ export function App() {
 
   // ---- keyboard (the same letters Fusion users know)
   const showKeysRef = useRef(false); showKeysRef.current = showKeys;
-  const latest = useRef({ bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline });
-  latest.current = { bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline };
+  const latest = useRef({ showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline });
+  latest.current = { showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline };
   // Another program (an AI client connected through MCP) can change the design while the page is open: notice it, when nothing here is half done
   const watch = useRef({ mode, busy, stamp: snap.stamp, dialogs: false });
   watch.current = { mode, busy, stamp: snap.stamp, dialogs: !!(placeImport || confirm || showUpdates || showKeys || section || edit) };
@@ -1257,6 +1277,7 @@ export function App() {
         if (inField) (e.target as HTMLElement).blur();
         if (L.confirm) setConfirm(null);
         else if (L.exportDlg) setExportDlg(null);
+        else if (L.showPrefs) setShowPrefs(false);
         else if (L.menu) setMenu(null);
         else if (L.edit) setEdit(null);
         else if (L.mode === 'extrude') void A.cancelExtrude();
@@ -1283,6 +1304,7 @@ export function App() {
         if (L.pending.length && sizeFields(L.tool, L.pending.length).length && /^[0-9.\-]$/.test(e.key)) { if (viewApi.current?.focusSize(0, e.key)) e.preventDefault(); return; }
         const map: Record<string, Tool> = { l: 'line', r: 'rect', c: 'circle', a: 'arc3', d: 'dimension', t: 'trim', o: 'offset' };
         if (map[k]) { A.chooseTool(map[k]!); return; }
+        if (k === 'enter' && L.tool === 'spline' && L.pending.length) { A.endChain(); return; }
         if (k === 'delete' || k === 'backspace') { A.deleteSelected(); return; }
         if (k === 'x') { A.toggleConstruction(); return; }
         if (k === 'e') void A.startExtrude();
@@ -1312,9 +1334,9 @@ export function App() {
     ? (tool ? (TOOL_HINT[tool]?.[Math.min(isDraw(tool) ? pending.length : picks.length, (TOOL_HINT[tool]?.length ?? 1) - 1)] ?? '') : selected.length ? `${selected.length} selected. Delete removes it, X makes it a construction line, Esc clears.` : 'Pick a sketch tool, or click a line to select it. Keys: L R C A T O D.')
     : HINT[mode === 'modify' && modTool !== 'fillet' && modTool !== 'chamfer' ? modTool : mode] ?? '';
   const triangles = snap.bodies.reduce((n, b) => n + b.faceIds.length, 0);
-  const placeholder = tool === 'rect' || tool === 'rectCenter' ? 'width, height' : tool === 'circle' || tool === 'circle2' ? 'diameter' : tool === 'slot' ? 'width' : 'length [, angle]';
+  const placeholder = tool === 'rect' || tool === 'rectCenter' ? 'width, height' : tool === 'rectRound' ? 'width, height, radius' : tool === 'polyIn' || tool === 'polyOut' ? 'radius [, angle]' : tool === 'circle' || tool === 'circle2' ? 'diameter' : tool === 'slot' ? 'width' : 'length [, angle]';
   const fieldNames = tool === 'rect' || tool === 'rectCenter' ? ['Width', 'Height'] : tool === 'circle' || tool === 'circle2' ? ['Diameter'] : tool === 'slot' ? ['Width'] : ['Length', 'Angle'];
-  const typable = isDraw(tool) && pending.length > 0 && tool !== 'arc3' && !(tool === 'slot' && pending.length < 2);
+  const typable = isDraw(tool) && pending.length > 0 && ['line', 'rect', 'rectCenter', 'circle', 'circle2', 'rectRound', 'polyIn', 'polyOut'].includes(tool as string) || (tool === 'slot' && pending.length >= 2);
 
   return (
     <div className="app">
@@ -1370,6 +1392,7 @@ export function App() {
             <label><span>Dimensions</span><input type="checkbox" aria-label="Dimensions" checked={showDims} onChange={(e) => setShowDims(e.target.checked)} /></label>
             <label><span>Sketch Grid</span><input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /></label>
             <label><span>Sketch Axes</span><input type="checkbox" checked={showAxes} onChange={(e) => setShowAxes(e.target.checked)} /></label>
+            <label><span>Polygon sides</span><input type="number" min={3} max={64} aria-label="Polygon sides" data-testid="polygon-sides" style={{ width: 52 }} value={sides} onChange={(e) => setSides(e.target.value)} /></label>
             <label><span>Snap</span><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /></label>
             <label><span>Profile</span><input type="checkbox" checked={showProfiles} onChange={(e) => setShowProfiles(e.target.checked)} /></label>
             <div className="pstat" data-testid="sketch-state">{activeSketch ? `${activeSketch.name}: ${activeSketch.dof === 0 ? 'fully constrained' : `${activeSketch.dof} degrees of freedom left`}` : ''}</div>
@@ -1447,6 +1470,14 @@ export function App() {
             <span className="hint">Move the mouse to the side you want and click, or type a distance and press Enter</span>
           </div>
         )}
+        {showPrefs && (
+          <div className="dialog" data-testid="prefs-dialog" role="dialog" aria-label="Preferences">
+            <div className="dhead">PREFERENCES</div>
+            <label className="drow"><span>Show initial start options</span><input type="checkbox" aria-label="Show initial start options" data-testid="pref-show-start" checked={showStart} onChange={(e) => setShowStart(e.target.checked)} /></label>
+            <div className="dnote">The hint and the "Load the demo bracket" button shown while a design is empty. Turn this off for a clean, empty view. Remembered on this computer.</div>
+            <div className="dbtns"><button className="primary" data-testid="prefs-close" onClick={() => setShowPrefs(false)}>Done</button></div>
+          </div>
+        )}
         {exportDlg && <ExportDialog names={snap.bodies.map((b) => b.name)} chosen={bodySel} slicers={slicers} startWithSlicer={exportDlg.slicer} busy={busy} onSave={(c) => void exportChosen(c)} onSlicer={(c) => void sliceChosen(c)} onClose={() => setExportDlg(null)} />}
         {section && (
           <div className="dialog" data-testid="section-dialog">
@@ -1499,7 +1530,7 @@ export function App() {
         {mode === 'model' && face && (
           <div className="seltip" data-testid="selection">Face {face.index} · {face.planeNormal ? 'plane' : face.cylinder ? `cylinder R${face.cylinder.radius.toFixed(2)}` : 'other'} · area ≈ {face.area.toFixed(1)} mm²</div>
         )}
-        {mode === 'model' && snap.bodies.length === 0 && snap.sketches.length === 0 && (
+        {mode === 'model' && snap.bodies.length === 0 && snap.sketches.length === 0 && showStart && (
           <div className="empty"><div><p>Nothing modelled yet.</p><p className="muted">Press Create Sketch, pick a plane, draw a shape, Finish Sketch, then Extrude (E).</p>
             <button disabled={busy} data-testid="demo" onClick={() => void run(api.demo)}>Load the demo bracket</button></div></div>
         )}

@@ -3,14 +3,16 @@ import type { Vec2 } from '../api';
 import type { Picked } from './pick';
 import { round3 } from './snap';
 
-export type DrawTool = 'line' | 'rect' | 'rectCenter' | 'circle' | 'circle2' | 'arc3' | 'slot';
+export type DrawTool = 'line' | 'rect' | 'rectCenter' | 'circle' | 'circle2' | 'arc3' | 'slot' | 'rect3' | 'rectRound' | 'circle3' | 'arcC' | 'polyIn' | 'polyOut' | 'polyEdge' | 'ellipse' | 'point' | 'spline';
+/** Settings the drawing tools read: how many sides the polygon tools make. */
+export const drawOpts = { sides: 6 };
 export type ConstraintTool = 'horizontal' | 'coincident' | 'parallel' | 'perpendicular' | 'tangent' | 'equal' | 'midpoint' | 'concentric' | 'fix';
 export type PickTool = 'dimension' | 'trim' | 'extend' | 'offset' | 'fillet' | ConstraintTool;
 export type Tool = DrawTool | PickTool;
 export interface Step { command: string; params: Record<string, unknown> }
 export interface Result { steps: Step[]; pending: Vec2[]; message?: string }
 
-const DRAW: DrawTool[] = ['line', 'rect', 'rectCenter', 'circle', 'circle2', 'arc3', 'slot'];
+const DRAW: DrawTool[] = ['line', 'rect', 'rectCenter', 'circle', 'circle2', 'arc3', 'slot', 'rect3', 'rectRound', 'circle3', 'arcC', 'polyIn', 'polyOut', 'polyEdge', 'ellipse', 'point', 'spline'];
 /** After press, drag and release these stay open (the first corner or centre is placed, the pointer still sets the size, a click or typed size finishes), as in Fusion. */
 export const OPEN_ON_DRAG: readonly string[] = ['rect', 'rectCenter', 'circle', 'circle2'];
 export const isDraw = (t: Tool | null): t is DrawTool => !!t && (DRAW as string[]).includes(t);
@@ -67,7 +69,55 @@ export function onClick(tool: DrawTool, pending: Vec2[], pt: Vec2): Result {
       if (!b) return dist(a, p) < EPS ? { steps: [], pending } : { steps: [], pending: [a, p] };
       if (lineDist(a, b, p) < EPS) return { steps: [], pending, message: 'Click away from the centre line to set the width' };
       return { steps: [{ command: 'sketch.slot.center_to_center', params: { p0: a, p1: b, width: round3(2 * lineDist(a, b, p)) } }], pending: [] };
+    case 'rect3': // one edge (two clicks), then a point on the opposite edge
+      if (!a) return { steps: [], pending: [p] };
+      if (!b) return dist(a, p) < EPS ? { steps: [], pending } : { steps: [], pending: [a, p] };
+      if (lineDist(a, b, p) < EPS) return { steps: [], pending, message: 'Click away from the first edge to set the width' };
+      return { steps: [{ command: 'sketch.rectangle.three_point', params: { p0: a, p1: b, p2: p } }], pending: [] };
+    case 'rectRound':
+      if (!a) return { steps: [], pending: [p] };
+      if (Math.abs(a[0] - p[0]) < EPS || Math.abs(a[1] - p[1]) < EPS) return { steps: [], pending, message: 'A rectangle needs a width and a height' };
+      return { steps: [{ command: 'sketch.rectangle.rounded', params: { p0: a, p1: p, radius: roundedRadius(a, p) } }], pending: [] };
+    case 'circle3':
+      if (!a) return { steps: [], pending: [p] };
+      if (!b) return dist(a, p) < EPS ? { steps: [], pending } : { steps: [], pending: [a, p] };
+      if (!circleThrough(a, b, p)) return { steps: [], pending, message: 'The three points must not lie on one line' };
+      return { steps: [{ command: 'sketch.circle.three_point', params: { p0: a, p1: b, p2: p } }], pending: [] };
+    case 'arcC': // the centre, where the arc starts, then a point in the direction it ends (it runs counter-clockwise from the start)
+      if (!a) return { steps: [], pending: [p] };
+      if (!b) return dist(a, p) < EPS ? { steps: [], pending } : { steps: [], pending: [a, p] };
+      if (dist(a, p) < EPS) return { steps: [], pending, message: 'Click away from the centre to set where the arc ends' };
+      return { steps: [{ command: 'sketch.arc.center_point', params: { center: a, start: b, end: p } }], pending: [] };
+    case 'polyIn': case 'polyOut': { // the centre, then the radius (to a corner, or to the middle of a side) and the way it turns
+      if (!a) return { steps: [], pending: [p] };
+      const r = dist(a, p); if (r < EPS) return { steps: [], pending, message: 'A polygon needs a size' };
+      return { steps: [{ command: tool === 'polyIn' ? 'sketch.polygon.inscribed' : 'sketch.polygon.circumscribed', params: { center: a, radius: round3(r), sides: drawOpts.sides, angle: round3((Math.atan2(p[1] - a[1], p[0] - a[0]) * 180) / Math.PI) } }], pending: [] };
+    }
+    case 'polyEdge': // the polygon stands on the left of the way from the first click to the second
+      if (!a) return { steps: [], pending: [p] };
+      if (dist(a, p) < EPS) return { steps: [], pending, message: 'A polygon needs a size' };
+      return { steps: [{ command: 'sketch.polygon.edge', params: { p0: a, p1: p, sides: drawOpts.sides } }], pending: [] };
+    case 'ellipse': // the centre, the end of the long axis, then a point on the short side
+      if (!a) return { steps: [], pending: [p] };
+      if (!b) return dist(a, p) < EPS ? { steps: [], pending } : { steps: [], pending: [a, p] };
+      if (lineDist(a, b, p) < EPS) return { steps: [], pending, message: 'Click away from the long axis to set the short one' };
+      return { steps: [{ command: 'sketch.ellipse', params: { center: a, major: b, minor: p } }], pending: [] };
+    case 'point': return { steps: [{ command: 'sketch.point', params: { point: p } }], pending: [] };
+    case 'spline': { // a click adds a point; landing on the first one (after two more) closes the curve; Enter, right-click or Esc ends it open
+      const last = pending[pending.length - 1];
+      if (last && dist(last, p) < EPS) return { steps: [], pending };
+      if (pending.length >= 3 && dist(pending[0]!, p) < EPS) return { steps: [splineStep(pending, true)!], pending: [] };
+      return { steps: [], pending: [...pending, p] };
+    }
   }
+}
+
+/** The corner radius a rounded rectangle gets when the radius has not been typed: a fifth of the shorter side. */
+export const roundedRadius = (a: Vec2, p: Vec2) => round3(Math.max(0.1, Math.min(Math.abs(p[0] - a[0]), Math.abs(p[1] - a[1])) * 0.2));
+/** The step for a spline through the clicked points, or null when there are not enough. */
+export function splineStep(points: Vec2[], closed: boolean): Step | null {
+  if (points.length < (closed ? 3 : 2)) return null;
+  return { command: 'sketch.spline.fit_point', params: { points, ...(closed ? { periodic: true } : {}) } };
 }
 
 const nums = (text: string) => text.replace(/[x×;]/gi, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean).map(Number);
@@ -100,6 +150,19 @@ export function onTyped(tool: DrawTool, pending: Vec2[], cursor: Vec2, text: str
     const ang = v.length > 1 ? (v[1]! * Math.PI) / 180 : Math.atan2(cursor[1] - from[1], cursor[0] - from[0]);
     const end = r3([from[0] + len * Math.cos(ang), from[1] + len * Math.sin(ang)]);
     return { steps: [{ command: 'sketch.line', params: { points: [from, end] } }], pending: [...pending, end] };
+  }
+  if (tool === 'rectRound') {
+    const w = v[0]!, h = v.length > 1 ? v[1]! : v[0]!;
+    if (!(w > 0) || !(h > 0)) return { steps: [], pending, message: 'Width and height must be above 0' };
+    const sx = cursor[0] >= a[0] ? 1 : -1, sy = cursor[1] >= a[1] ? 1 : -1, c = r3([a[0] + sx * w, a[1] + sy * h]);
+    const r = v.length > 2 ? v[2]! : roundedRadius(a, c);
+    if (!(r > 0) || r >= Math.min(w, h) / 2) return { steps: [], pending, message: 'The corner radius must be above 0 and less than half the shorter side' };
+    return { steps: [{ command: 'sketch.rectangle.rounded', params: { p0: a, p1: c, radius: r } }], pending: [] };
+  }
+  if (tool === 'polyIn' || tool === 'polyOut') {
+    if (!(v[0]! > 0)) return { steps: [], pending, message: 'The radius must be above 0' };
+    const ang = v.length > 1 ? v[1]! : (Math.atan2(cursor[1] - a[1], cursor[0] - a[0]) * 180) / Math.PI;
+    return { steps: [{ command: tool === 'polyIn' ? 'sketch.polygon.inscribed' : 'sketch.polygon.circumscribed', params: { center: a, radius: round3(v[0]!), sides: drawOpts.sides, angle: round3(ang) } }], pending: [] };
   }
   if (tool === 'slot' && pending.length === 2) {
     if (!(v[0]! > 0)) return { steps: [], pending, message: 'The width must be above 0' };
@@ -150,7 +213,69 @@ export function preview(tool: DrawTool, pending: Vec2[], cur: Vec2): Vec2[][] {
       const o = (p: Vec2, k: number): Vec2 => [p[0] + nx * w * k, p[1] + ny * w * k];
       return [[o(a, 1), o(b, 1)], [o(a, -1), o(b, -1)], arcPts(b, w, ang - Math.PI / 2, ang + Math.PI / 2, 16), arcPts(a, w, ang + Math.PI / 2, ang + (3 * Math.PI) / 2, 16)];
     }
+    case 'rect3': {
+      if (!b) return [[a, cur]];
+      const w = lineDist(a, b, cur), n = sideOf(a, b, cur); if (w < EPS) return [[a, b]];
+      const c: Vec2 = [b[0] + n[0] * w, b[1] + n[1] * w], d: Vec2 = [a[0] + n[0] * w, a[1] + n[1] * w];
+      return [[a, b, c, d, a]];
+    }
+    case 'rectRound': {
+      const x0 = Math.min(a[0], cur[0]), x1 = Math.max(a[0], cur[0]), y0 = Math.min(a[1], cur[1]), y1 = Math.max(a[1], cur[1]);
+      const r = Math.min(roundedRadius(a, cur), (x1 - x0) / 2, (y1 - y0) / 2); if (!(r > 0)) return [[a, cur]];
+      const q = Math.PI / 2;
+      return [[...arcPts([x1 - r, y0 + r], r, -q, 0, 8), ...arcPts([x1 - r, y1 - r], r, 0, q, 8), ...arcPts([x0 + r, y1 - r], r, q, 2 * q, 8), ...arcPts([x0 + r, y0 + r], r, 2 * q, 3 * q, 8), [x1 - r, y0]]];
+    }
+    case 'circle3': {
+      if (!b) return [[a, cur]];
+      const c = circleThrough(a, b, cur);
+      return c ? [ring(c.center, c.r), [a, b]] : [[a, b, cur]];
+    }
+    case 'arcC': {
+      if (!b) return [[a, cur]];
+      const r = dist(a, b), t0 = Math.atan2(b[1] - a[1], b[0] - a[0]), t1 = Math.atan2(cur[1] - a[1], cur[0] - a[0]);
+      const sweep = (((t1 - t0) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      return [arcPts(a, r, t0, t0 + sweep, 48), [a, b], [a, [a[0] + r * Math.cos(t0 + sweep), a[1] + r * Math.sin(t0 + sweep)]]];
+    }
+    case 'polyIn': case 'polyOut': {
+      const r = dist(a, cur); if (r < EPS) return [];
+      const pts = polygonPoints(a, r, drawOpts.sides, Math.atan2(cur[1] - a[1], cur[0] - a[0]), tool === 'polyOut');
+      return [[...pts, pts[0]!], [a, cur]];
+    }
+    case 'polyEdge': {
+      if (dist(a, cur) < EPS) return [];
+      const n = drawOpts.sides, pts: Vec2[] = [a, cur]; let dir = Math.atan2(cur[1] - a[1], cur[0] - a[0]); const len = dist(a, cur), turn = (Math.PI * 2) / n;
+      for (let i = 2; i < n; i++) { dir += turn; const l = pts[pts.length - 1]!; pts.push([l[0] + len * Math.cos(dir), l[1] + len * Math.sin(dir)]); } // walks round, turning left, so the shape is on the left of a to cur
+      return [[...pts, a]];
+    }
+    case 'ellipse': {
+      if (!b) return [[a, cur]];
+      const major = dist(a, b), minor = lineDist(a, b, cur); if (minor < EPS) return [[a, b]];
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), ca = Math.cos(ang), sa = Math.sin(ang);
+      return [Array.from({ length: 65 }, (_, i) => { const t = (i / 64) * Math.PI * 2, x = major * Math.cos(t), y = minor * Math.sin(t); return [a[0] + x * ca - y * sa, a[1] + x * sa + y * ca] as Vec2; }), [a, b]];
+    }
+    case 'point': return [];
+    case 'spline': return [catmullRom([...pending, cur])];
   }
+}
+
+/** The corners of a regular polygon: the first corner at `angle` (inscribed) or the middle of a side there (circumscribed, where the radius reaches the sides). */
+export function polygonPoints(c: Vec2, r: number, sides: number, angle: number, circumscribed: boolean): Vec2[] {
+  const R = circumscribed ? r / Math.cos(Math.PI / sides) : r, a0 = circumscribed ? angle - Math.PI / sides : angle;
+  return Array.from({ length: sides }, (_, i) => { const t = a0 + (i * Math.PI * 2) / sides; return [c[0] + R * Math.cos(t), c[1] + R * Math.sin(t)] as Vec2; });
+}
+/** A smooth curve through the points, for showing a spline being drawn (the engine fits the real one). */
+function catmullRom(pts: Vec2[]): Vec2[] {
+  if (pts.length < 3) return pts;
+  const out: Vec2[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]!, p1 = pts[i]!, p2 = pts[i + 1]!, p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+    for (let k = 0; k < 12; k++) {
+      const t = k / 12, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map((j) => 0.5 * (2 * p1[j]! + (-p0[j]! + p2[j]!) * t + (2 * p0[j]! - 5 * p1[j]! + 4 * p2[j]! - p3[j]!) * t2 + (-p0[j]! + 3 * p1[j]! - 3 * p2[j]! + p3[j]!) * t3)) as Vec2);
+    }
+  }
+  out.push(pts[pts.length - 1]!);
+  return out;
 }
 
 /** Where a constraint tool is after the entities picked so far: ready with a step, still needing more picks, or refusing with a reason. */
@@ -222,6 +347,17 @@ export function sizeBoxes(tool: Tool | null, pending: Vec2[], cursor: Vec2): Siz
       const w = lineDist(a, b, cursor), n = sideOf(a, b, cursor), m: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       return [{ label: 'Width', at: [m[0] + (n[0] * w) , m[1] + (n[1] * w)], value: 2 * w }];
     }
+    case 'rectRound': return [{ label: 'Width', at: [(a[0] + cursor[0]) / 2, a[1]], value: Math.abs(dx) }, { label: 'Height', at: [cursor[0], (a[1] + cursor[1]) / 2], value: Math.abs(dy) }];
+    case 'rect3': {
+      if (!b) return polar(a);
+      const w = lineDist(a, b, cursor), n = sideOf(a, b, cursor), m: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      return [{ label: 'Width', at: [m[0] + n[0] * w, m[1] + n[1] * w], value: w }];
+    }
+    case 'polyIn': case 'polyOut': return [{ label: 'Radius', at: [(a[0] + cursor[0]) / 2, (a[1] + cursor[1]) / 2], value: Math.hypot(dx, dy) }, { label: 'Angle', at: [a[0], a[1]], value: (Math.atan2(dy, dx) * 180) / Math.PI }];
+    case 'polyEdge': return polar(a);
+    case 'arcC': return b ? [] : [{ label: 'Radius', at: [(a[0] + cursor[0]) / 2, (a[1] + cursor[1]) / 2], value: Math.hypot(dx, dy) }, { label: 'Angle', at: [a[0], a[1]], value: (Math.atan2(dy, dx) * 180) / Math.PI }];
+    case 'ellipse': return b ? [] : polar(a);
+    default: return []; // circle3, point and spline are placed by clicking only
   }
 }
 
@@ -265,6 +401,16 @@ export function applyTyped(tool: DrawTool, pending: Vec2[], cursor: Vec2, typed:
       const n = sideOf(a, b, cursor), m: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       return [m[0] + (n[0] * w) / 2, m[1] + (n[1] * w) / 2];
     }
+    case 'rectRound': return [a[0] + sx * pos(0, live[0]!), a[1] + sy * pos(1, live[1]!)];
+    case 'rect3': {
+      if (!b) return polarFrom(a);
+      const w = num(0); if (w === null || !(w > 0)) return cursor;
+      const n = sideOf(a, b, cursor), m: Vec2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      return [m[0] + n[0] * w, m[1] + n[1] * w];
+    }
+    case 'polyIn': case 'polyOut': case 'polyEdge': return polarFrom(a);
+    case 'arcC': return b ? cursor : polarFrom(a);
+    case 'ellipse': return b ? cursor : polarFrom(a);
     default: return cursor;
   }
 }

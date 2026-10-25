@@ -29,6 +29,8 @@ Each script says in its header how to run it. They need the real engine, a built
 | `attach.mjs` | a sketch on a face the engine will not attach to opens on the same plane, unattached (the refusal is simulated; needs a fresh server) |
 | `bodies.mjs` | Torus; selecting whole bodies (browser row, Ctrl+click, double-click in the view); rename (double-click, F2, right-click); Isolate; the Export dialog (zip with one STL per body, 3MF); Open in slicer (only when a slicer is installed: put a stand-in `prusa-slicer` script first on the PATH of the server to try it) (needs a fresh server) |
 | `primitives.mjs` | Box, Cylinder and Sphere: typed sizes, a click on a face to place, join, a named new body, a bad size, Esc, undo (needs a fresh server) |
+| `sketchtools.mjs` | the added sketch tools: 3-point rectangle, rounded rectangle, 3-point circle, centre-point arc, three polygons, ellipse, point, spline (needs a fresh server) |
+| `prefs.mjs` | File > Preferences: Show initial start options off removes the empty-design message and the demo button, and it is remembered (needs a fresh server) |
 | `snap.mjs` | the face under the pointer lights up when choosing a sketch plane; Extrude and Press Pull reach another face's height by clicking it (needs a fresh server) |
 | `strip.mjs` | a strip sketched along a face's edge (lines on top of the face outline): two shapes, clicking the strip, extruding it; orbiting past the top view (needs a fresh server) |
 | `usability.mjs` | E on a body face (Press Pull), the compact Move / Copy dialog (typing, step buttons, arrows, Copy, undo), the ribbon in a 1000 px window, the right-click Modify section, snap hints (end, middle, crossing, alignment) and the rubber band (needs a fresh server) |

@@ -162,3 +162,5 @@ header button.docname:hover:not(:disabled), header button.docname:focus-visible 
 .explinks button { padding: 1px 8px; font-size: 11px; }
 .bnode.selected { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .brename { width: 100%; box-sizing: border-box; font: inherit; padding: 0 3px; }
+
+.sketch-tools .rpin { display: contents; }

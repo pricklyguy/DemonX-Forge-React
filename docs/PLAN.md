@@ -110,6 +110,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **0.29.0 (2026-10-25):** Torus; whole-body select and rename; export of chosen bodies (zip of one STL per body, 3MF); Open in slicer through the engine's `file.slicers` and `file.save_mesh slicer` (only an id the engine listed is accepted); `body.rename` allowed, plus a deny list for engine commands that touch files. Torus joins are slow in the engine (9 s for an overlapping join), so Torus starts as a New Body. Next on the list: Construct planes, more sketch tools (see `docs/evaluation/ALTERNATE-BUILD.md`).
 
+**0.30.0 (2026-10-25):** ten more sketch tools (3-point rectangle, rounded rectangle, 3-point circle, centre-point arc, three polygons, ellipse, spline, point) through the same click / typed / preview functions in `web/src/sketch/tools.ts`; polygon sides live in `drawOpts` (set from the Sketch Palette). File > Preferences with "Show initial start options". **Owner wish:** their own start page like Fusion's Home and SolidCraft's Start (New design, Open, Recent files with thumbnails, samples). Needs a recent-files list (names and paths; the browser cannot read a path, so keep file handles or a list the server keeps), thumbnails, and a place to show it; do after the sketch tools. Next sketch pass: Modify (chamfer, break, scale, move/copy, mirror, patterns), constraints (collinear, symmetry, AutoConstrain), Insert DXF / SVG, text.
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.

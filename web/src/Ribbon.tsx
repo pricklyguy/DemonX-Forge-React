@@ -138,6 +138,27 @@ export function Ribbon(p: Props) {
     { id: 'btn-scale-mesh', pinned: true, icon: <Icon.bScale />, label: 'Scale', pressed: p.modTool === 'scale', disabled: !p.canModify, onClick: p.onScale },
   ];
 
+  const T = (id: string, icon: ReactNode, label: string, tool: Tool, extra: Partial<Cmd> = {}): Cmd => ({ id: `tool-${id}`, icon, label, pressed: p.tool === tool, onClick: () => p.onTool(tool), ...extra });
+  const sketchCreate: Cmd[] = [
+    T('line', <Icon.line />, 'Line', 'line', { pinned: true, keyHint: 'L' }),
+    T('rect', <Icon.rect />, '2-Point Rectangle', 'rect', { pinned: true, keyHint: 'R' }),
+    T('rectCenter', <Icon.rectCenter />, 'Center Rectangle', 'rectCenter', { pinned: true }),
+    T('circle', <Icon.circle />, 'Center Circle', 'circle', { pinned: true, keyHint: 'C' }),
+    T('circle2', <Icon.circle2 />, '2-Point Circle', 'circle2', { pinned: true }),
+    T('arc3', <Icon.arc3 />, '3-Point Arc', 'arc3', { pinned: true, keyHint: 'A' }),
+    T('slot', <Icon.slot />, 'Slot', 'slot', { pinned: true }),
+    T('rect3', <Icon.tRect3 />, '3-Point Rectangle', 'rect3'),
+    T('rectRound', <Icon.tRectRound />, 'Rounded Rectangle', 'rectRound'),
+    T('circle3', <Icon.tCircle3 />, '3-Point Circle', 'circle3'),
+    T('arcC', <Icon.tArcC />, 'Center Point Arc', 'arcC'),
+    T('polyIn', <Icon.tPolyIn />, 'Inscribed Polygon', 'polyIn'),
+    T('polyOut', <Icon.tPolyOut />, 'Circumscribed Polygon', 'polyOut'),
+    T('polyEdge', <Icon.tPolyEdge />, 'Edge Polygon', 'polyEdge'),
+    T('ellipse', <Icon.tEllipse />, 'Ellipse', 'ellipse'),
+    T('spline', <Icon.tSpline />, 'Fit Point Spline', 'spline'),
+    T('point', <Icon.tPoint />, 'Point', 'point'),
+  ];
+
   const shown = sketching ? 'solid' : tab;
   return (
     <div className="ribbon" data-testid="ribbon">
@@ -156,15 +177,7 @@ export function Ribbon(p: Props) {
           </>
         ) : (
           <>
-            <Group title="CREATE">
-              <Btn id="tool-line" icon={<Icon.line />} label="Line" keyHint="L" pressed={p.tool === 'line'} onClick={() => p.onTool('line')} />
-              <Btn id="tool-rect" icon={<Icon.rect />} label="2-Point Rectangle" keyHint="R" pressed={p.tool === 'rect'} onClick={() => p.onTool('rect')} />
-              <Btn id="tool-rectCenter" icon={<Icon.rectCenter />} label="Center Rectangle" pressed={p.tool === 'rectCenter'} onClick={() => p.onTool('rectCenter')} />
-              <Btn id="tool-circle" icon={<Icon.circle />} label="Center Circle" keyHint="C" pressed={p.tool === 'circle'} onClick={() => p.onTool('circle')} />
-              <Btn id="tool-circle2" icon={<Icon.circle2 />} label="2-Point Circle" pressed={p.tool === 'circle2'} onClick={() => p.onTool('circle2')} />
-              <Btn id="tool-arc3" icon={<Icon.arc3 />} label="3-Point Arc" keyHint="A" pressed={p.tool === 'arc3'} onClick={() => p.onTool('arc3')} />
-              <Btn id="tool-slot" icon={<Icon.slot />} label="Slot" pressed={p.tool === 'slot'} onClick={() => p.onTool('slot')} />
-            </Group>
+            <CmdGroup title="CREATE" cmds={sketchCreate} open={open} setOpen={setOpen} />
             <Group title="MODIFY">
               <Btn id="tool-trim" icon={<Icon.trim />} label="Trim" keyHint="T" pressed={p.tool === 'trim'} onClick={() => p.onTool('trim')} />
               <Btn id="tool-extend" icon={<Icon.extend />} label="Extend" pressed={p.tool === 'extend'} onClick={() => p.onTool('extend')} />
