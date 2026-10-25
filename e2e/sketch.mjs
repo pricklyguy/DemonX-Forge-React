@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/sketch.mjs         Screenshots go to $SHOTS (default /tmp).
+import { waitAsync } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -121,13 +122,20 @@ await p.screenshot({ path: `${shots}/s5-preview.png` });
 
 // change the distance: the preview follows (and does not stack features)
 await p.getByLabel('Distance').fill('8');
-await p.waitForFunction(async () => { const s = await (await fetch('/api/state')).json(); return s.bodies[0] && Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) < 8.0001; }, null, { timeout: 15000 });
+// one reading of the design must show both: the 8 tall body and the Extrude count (the preview is taken back and made again, so two readings can fall either side of that).
+// (Polled here: a waitForFunction with an async function returns at once, because a promise is always truthy.)
+let reading = { extrudes: -1 };
+for (let i = 0; i < 80; i++) {
+  const r = await p.evaluate(async () => { const s = await (await fetch('/api/state')).json(); if (!(s.bodies[0] && Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) < 8.0001)) return null; return { extrudes: s.timeline.filter((t) => t.type === 'ExtrudeFeature').length }; });
+  if (r) { reading = r; break; }
+  await p.waitForTimeout(200);
+}
 s = await state();
-check(s.timeline.filter((t) => t.type === 'ExtrudeFeature').length === 1, 'changing the distance replaces the preview, one Extrude in the timeline');
+check(reading.extrudes === 1, 'changing the distance replaces the preview, one Extrude in the timeline');
 
 // Cancel removes it
 await p.getByRole('button', { name: 'Cancel' }).click();
-await p.waitForFunction(async () => (await (await fetch('/api/state')).json()).bodies.length === 0, null, { timeout: 15000 });
+await waitAsync(p, async () => (await (await fetch('/api/state')).json()).bodies.length === 0, null, { timeout: 15000 });
 s = await state();
 check(s.bodies.length === 0 && !s.timeline.some((t) => t.type === 'ExtrudeFeature'), 'Cancel undoes the preview completely');
 
@@ -167,7 +175,7 @@ await p.waitForFunction(() => /1 selected/.test(document.querySelector('[data-te
 await p.getByLabel('Operation').selectOption('cut');
 await p.getByLabel('Distance').fill('5');
 // the preview must be the cut (13 faces); the first preview, a join with the default operation, has other face counts
-await p.waitForFunction(async () => { const s = await (await fetch('/api/state')).json(); return s.timeline.filter((t) => t.type === 'ExtrudeFeature').length === 2 && s.bodies[0].faces.length === 13; }, null, { timeout: 20000 });
+await waitAsync(p, async () => { const s = await (await fetch('/api/state')).json(); return s.timeline.filter((t) => t.type === 'ExtrudeFeature').length === 2 && s.bodies[0].faces.length === 13; }, null, { timeout: 20000 });
 await settle(500);
 await p.getByTestId('extrude-ok').click();
 await p.getByTestId('extrude-dialog').waitFor({ state: 'detached' });

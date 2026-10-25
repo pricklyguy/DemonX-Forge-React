@@ -3,6 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/edit.mjs           Screenshots go to $SHOTS (default /tmp).
+import { waitAsync } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -55,10 +56,10 @@ s = await state();
 check(near(ranges(s)[2][1], 10), 'opening it changed nothing');
 await p.screenshot({ path: `${shots}/e1-edit-open.png` });
 await p.getByLabel('Distance').fill('25');
-await p.waitForFunction(async () => { const s = await (await fetch('/api/state')).json(); return Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) > 24.9; }, null, { timeout: 15000 });
+await waitAsync(p, async () => { const s = await (await fetch('/api/state')).json(); return Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) > 24.9; }, null, { timeout: 15000 });
 check(true, 'the preview follows the new distance (25)');
 await p.getByRole('button', { name: 'Cancel' }).click();
-await p.waitForFunction(async () => { const s = await (await fetch('/api/state')).json(); return s.bodies[0] && Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) < 10.1; }, null, { timeout: 15000 });
+await waitAsync(p, async () => { const s = await (await fetch('/api/state')).json(); return s.bodies[0] && Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) < 10.1; }, null, { timeout: 15000 });
 s = await state();
 check(JSON.stringify(await names()) === '["Sketch1","Extrude1"]' && near(ranges(s)[2][1], 10), 'Cancel puts it back to 10, nothing else changed');
 
@@ -66,7 +67,7 @@ await item('Extrude1').dblclick();
 await p.getByTestId('extrude-dialog').waitFor();
 await settle(400);
 await p.getByLabel('Distance').fill('25');
-await p.waitForFunction(async () => { const s = await (await fetch('/api/state')).json(); return Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) > 24.9; }, null, { timeout: 15000 });
+await waitAsync(p, async () => { const s = await (await fetch('/api/state')).json(); return Math.max(...s.bodies[0].positions.filter((_, i) => i % 3 === 2)) > 24.9; }, null, { timeout: 15000 });
 await p.getByTestId('extrude-ok').click();
 await p.getByTestId('extrude-dialog').waitFor({ state: 'detached' });
 s = await state();

@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/edges.mjs          Screenshots go to $SHOTS (default /tmp).
+import { waitAsync } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -20,7 +21,7 @@ const click = async (q) => { const [x, y] = await at(q); await p.mouse.move(x, y
 const clickWorld = async (w) => { const [x, y] = await proj(w); await p.mouse.move(x, y); await p.mouse.click(x, y); };
 const settle = (ms = 500) => p.waitForTimeout(ms);
 const text = (id) => p.getByTestId(id).innerText();
-const waitFaces = (n) => p.waitForFunction(async (n) => (await (await fetch('/api/state')).json()).bodies[0]?.faces.length === n, n, { timeout: 20000 });
+const waitFaces = (n) => waitAsync(p, async (n) => (await (await fetch('/api/state')).json()).bodies[0]?.faces.length === n, n, { timeout: 20000 });
 
 await p.goto(URL);
 await p.getByTestId('demo').waitFor({ timeout: 30000 });

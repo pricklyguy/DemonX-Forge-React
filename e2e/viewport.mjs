@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/viewport.mjs        Screenshots go to $SHOTS (default /tmp).
+import { waitAsync } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -39,7 +40,7 @@ check(await p.getByTestId('selection').count() === 1, 'a left drag does not clea
 
 // edit the parameter (in the browser tree)
 await p.locator('#p-width').fill('100 mm'); await p.locator('#p-width').press('Enter');
-await p.waitForFunction(async () => { const s = await (await fetch('/api/state')).json(); return Math.min(...s.bodies[0].positions.filter((_, i) => i % 3 === 1)) < -99.9; }, null, { timeout: 60000 });
+await waitAsync(p, async () => { const s = await (await fetch('/api/state')).json(); return Math.min(...s.bodies[0].positions.filter((_, i) => i % 3 === 1)) < -99.9; }, null, { timeout: 60000 });
 check(true, 'width 100 mm rebuilt the part');
 await p.screenshot({ path: `${shots}/forge-2-width100.png` });
 
@@ -49,12 +50,12 @@ const [hx, hy] = await proj([40, -50, 0]);
 await p.mouse.click(hx, hy);
 await p.keyboard.press('h');
 await p.getByTestId('modify-dialog').waitFor();
-await p.waitForFunction(async (n) => (await (await fetch('/api/state')).json()).bodies[0].faces.length > n, f0, { timeout: 60000 }); // the live preview
+await waitAsync(p, async (n) => (await (await fetch('/api/state')).json()).bodies[0].faces.length > n, f0, { timeout: 60000 }); // the live preview
 await p.getByTestId('modify-ok').click();
 await p.getByTestId('modify-dialog').waitFor({ state: 'detached' });
 check(true, 'H and OK drill a hole at the clicked point', `${f0} -> ${(await state()).bodies[0].faces.length} faces`);
 await p.getByLabel('Undo').click();
-await p.waitForFunction(async (n) => (await (await fetch('/api/state')).json()).bodies[0].faces.length === n, f0, { timeout: 60000 });
+await waitAsync(p, async (n) => (await (await fetch('/api/state')).json()).bodies[0].faces.length === n, f0, { timeout: 60000 });
 check(true, 'Undo removes the hole');
 
 // a refused edit shows the engine's reason and the field goes back
