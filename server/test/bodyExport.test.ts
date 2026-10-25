@@ -5,7 +5,7 @@ import { delimiter, join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SolidCraftEngine } from '../src/engine/solidcraft';
 import { parse3mf } from '../src/engine/mesh3mf';
-import { isAllowedCommand } from '../src/commands';
+import { BadRequest, checkStep, isAllowedCommand } from '../src/commands';
 
 const root = resolve(__dirname, '..', '..');
 const exe = process.platform === 'win32' ? 'solidcraft-cli.exe' : 'solidcraft-cli';
@@ -17,7 +17,16 @@ describe('which commands the browser may send', () => {
     expect(isAllowedCommand('body.rename')).toBe(true);
     expect(isAllowedCommand('body.delete')).toBe(false);
     expect(isAllowedCommand('solid.torus')).toBe(true);
-    for (const id of ['file.export', 'file.save_mesh', 'sketch.export_dxf', 'sketch.insert_dxf', 'sketch.insert_svg', 'sketch.text', 'parameters.import', 'timeline.export_script']) expect(isAllowedCommand(id), id).toBe(false);
+    for (const id of ['file.export', 'file.save_mesh', 'sketch.export_dxf', 'sketch.insert_dxf', 'sketch.insert_svg', 'parameters.import', 'timeline.export_script']) expect(isAllowedCommand(id), id).toBe(false);
+  });
+});
+
+describe('Text and fonts', () => {
+  it('lets the browser name an installed font but never hand over a file', () => {
+    expect(checkStep({ command: 'sketch.text', params: { text: 'Hi', at: [0, 0], font: 'Arial', bold: true } }).command).toBe('sketch.text');
+    expect(checkStep({ command: 'sketch.text', params: { text: 'Hi', at: [0, 0] } }).command).toBe('sketch.text'); // no font: the built-in one
+    for (const font of ['/etc/fonts/x.ttf', 'C:\\Windows\\Fonts\\arial.ttf', '~/a.otf', '%WINDIR%/Fonts/a', 'arial.ttf', '..\\x']) expect(() => checkStep({ command: 'sketch.text', params: { text: 'Hi', at: [0, 0], font } }), font).toThrow(BadRequest);
+    expect(() => checkStep({ command: 'sketch.edit_text', params: { link: 't1', edits: [{ link: 't1', font: '/x.ttf' }] } })).toThrow(BadRequest);
   });
 });
 

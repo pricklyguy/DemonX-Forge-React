@@ -90,6 +90,9 @@ export interface TimelineItem { id: number; name: string; type: string; suppress
 export interface Doc { name: string; /** True when there are changes since the last save or open. */ dirty: boolean }
 export type ExportFormat = 'step' | 'stl' | 'stla' | '3mf' | 'obj';
 
+import type { ConstructionPlane } from './constructPlanes';
+export type { ConstructionPlane, PlaneFrame } from './constructPlanes';
+
 export interface Snapshot {
   doc: Doc;
   bodies: Body[];
@@ -100,6 +103,8 @@ export interface Snapshot {
   /** The engine's state stamp when this snapshot was made (see Engine.stamp). */
   stamp: string;
   sketches: Sketch[];
+  /** The construction planes made so far (Offset Plane, Plane at Angle, Midplane), with where each one is when that can be told. */
+  planes: ConstructionPlane[];
   /** How long the engine took to produce it, for the status bar. */
   ms: number;
   /** Things the engine would have ignored silently, found by our own checks. */

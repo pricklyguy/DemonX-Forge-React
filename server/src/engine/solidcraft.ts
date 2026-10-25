@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { MeshRefused, describePlan, meshSteps, planMesh, type MeshPlan } from '../mesh/slab';
 import { FileError, packForge, unpackForge } from '../forgeFile';
 import { EngineError, type Body, type CommandStep, type ExportFormat, type Engine, type BodyEdge, type Face, type Parameter, type Sketch, type Snapshot, type TimelineItem, type Vec2, type Vec3 } from './Engine';
+import { planeFromDefinition, type ConstructionPlane, type PlaneFrame } from './constructPlanes';
 import { parse3mf } from './mesh3mf';
 
 type Pending = { resolve: (v: any) => void; reject: (e: Error) => void };
@@ -363,7 +364,8 @@ export class SolidCraftEngine implements Engine {
       const marker = Number(info?.marker ?? timeline.length);
       const doc = { name: this.docName, dirty: !!info?.dirty };
       const stamp = await this.stampNow();
-      if (!names.length) return { doc, bodies: [], parameters, timeline, marker, stamp, sketches, ms: Math.round(performance.now() - t0), warnings: [] };
+      const planes = await this.constructionPlanes(timeline.slice(0, marker));
+      if (!names.length) return { doc, bodies: [], parameters, timeline, marker, stamp, sketches, planes, ms: Math.round(performance.now() - t0), warnings: [] };
       const path = join(this.work, `mesh-${this.nextId}.3mf`);
       await this.tool('export', { path, format: '3mf-tagged' });
       const meshes = parse3mf(new Uint8Array(readFileSync(path)));
@@ -372,8 +374,21 @@ export class SolidCraftEngine implements Engine {
         const topo = await this.tool('body_topology', { body: m.name });
         bodies.push({ ...m, faces: (topo?.faces ?? []).map(toFace), edges: (topo?.edges ?? []).map(toEdge), mesh: meshNames.has(m.name) });
       }
-      return { doc, bodies, parameters, timeline, marker, stamp, sketches, ms: Math.round(performance.now() - t0), warnings: [] };
+      return { doc, bodies, parameters, timeline, marker, stamp, sketches, planes, ms: Math.round(performance.now() - t0), warnings: [] };
     }
+  }
+
+  /** The construction planes among the active timeline items, in order (a plane can be made from an earlier one). */
+  private async constructionPlanes(items: TimelineItem[]): Promise<ConstructionPlane[]> {
+    const out: ConstructionPlane[] = [], known = new Map<string, PlaneFrame>();
+    for (const t of items) {
+      if (t.type !== 'ConstructionPlane') continue;
+      let r: { kind: ConstructionPlane['kind']; frame: PlaneFrame | null } = { kind: 'other', frame: null };
+      try { r = planeFromDefinition((await this.tool('execute', { command: 'timeline.inspect', params: { feature: t.name } }))?.definition, known); } catch { /* a plane the engine cannot describe is still listed */ }
+      if (r.frame && !t.suppressed) known.set(t.name, r.frame);
+      out.push({ name: t.name, kind: r.kind, suppressed: t.suppressed, frame: r.frame });
+    }
+    return out;
   }
 }
 

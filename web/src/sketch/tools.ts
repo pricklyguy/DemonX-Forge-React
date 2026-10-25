@@ -7,7 +7,7 @@ export type DrawTool = 'line' | 'rect' | 'rectCenter' | 'circle' | 'circle2' | '
 /** Settings the drawing tools read: how many sides the polygon tools make. */
 export const drawOpts = { sides: 6 };
 export type ConstraintTool = 'horizontal' | 'coincident' | 'parallel' | 'perpendicular' | 'tangent' | 'equal' | 'midpoint' | 'concentric' | 'fix' | 'collinear' | 'symmetry';
-export type PickTool = 'dimension' | 'trim' | 'extend' | 'offset' | 'fillet' | 'chamfer' | 'break' | 'smirror' | 'scirc' | ConstraintTool;
+export type PickTool = 'dimension' | 'trim' | 'extend' | 'offset' | 'fillet' | 'chamfer' | 'break' | 'smirror' | 'scirc' | 'text' | ConstraintTool;
 export type Tool = DrawTool | PickTool;
 export interface Step { command: string; params: Record<string, unknown> }
 export interface Result { steps: Step[]; pending: Vec2[]; message?: string }
@@ -18,7 +18,7 @@ export const OPEN_ON_DRAG: readonly string[] = ['rect', 'rectCenter', 'circle', 
 export const isDraw = (t: Tool | null): t is DrawTool => !!t && (DRAW as string[]).includes(t);
 /** What the pointer can land on for a tool that picks existing geometry. */
 export const PICK_MODE: Record<PickTool, 'curve' | 'point' | 'any'> = {
-  dimension: 'any', trim: 'curve', extend: 'curve', offset: 'curve', fillet: 'point', chamfer: 'point', break: 'curve', smirror: 'curve', scirc: 'point', collinear: 'curve', symmetry: 'any',
+  dimension: 'any', trim: 'curve', extend: 'curve', offset: 'curve', fillet: 'point', chamfer: 'point', break: 'curve', smirror: 'curve', scirc: 'point', text: 'point', collinear: 'curve', symmetry: 'any',
   horizontal: 'any', coincident: 'any', parallel: 'curve', perpendicular: 'curve', tangent: 'curve', equal: 'curve', midpoint: 'any', concentric: 'curve', fix: 'any',
 };
 

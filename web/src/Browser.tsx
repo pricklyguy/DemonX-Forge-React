@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import type { Body, Parameter, Sketch } from './api';
+import type { Body, ConstructionPlane, Parameter, Sketch } from './api';
 import { Icon } from './icons';
 
 interface Props {
   docName: string;
   bodies: Body[]; sketches: Sketch[]; parameters: Parameter[];
   hiddenBodies: Set<string>; hiddenSketches: Set<number>; showOrigin: boolean; busy: boolean;
-  pickingPlane: boolean; onPickPlane(plane: 'XY' | 'XZ' | 'YZ'): void;
+  pickingPlane: boolean; onPickPlane(plane: string): void;
+  planes: ConstructionPlane[]; hiddenPlanes: Set<string>; onTogglePlane(name: string): void; onPlaneMenu(name: string, x: number, y: number): void;
   onToggleBody(name: string): void; onToggleSketch(id: number): void; onToggleOrigin(): void; onEditSketch(name: string): void;
   onSetParam(name: string, value: string): Promise<boolean>;
   /** Whole-body selection and naming: a click selects, Ctrl or Shift adds, double-click (or F2) renames, right-click opens the menu. */
@@ -63,6 +64,15 @@ export function Browser(p: Props) {
             onClick={(e) => p.onSelectBody(b.name, e.ctrlKey || e.metaKey || e.shiftKey)} onContext={(e) => { e.preventDefault(); p.onBodyMenu(b.name, e.clientX, e.clientY); }} onDouble={() => p.onStartRename(b.name)}
             label={p.renaming === b.name ? <RenameBox name={b.name} onDone={(to) => (to ? p.onRenameBody(b.name, to) : p.onRenameBody(b.name, b.name))} /> : b.name} />)}
         </Node>
+        {p.planes.length > 0 && (
+          <Node id="construction" label={`Construction (${p.planes.length})`}>
+            {p.planes.map((c) => (
+              <Node key={c.name} id={`plane-${c.name}`} label={p.pickingPlane ? <button onClick={() => p.onPickPlane(c.name)}>{c.name}</button> : c.name}
+                eye={!p.hiddenPlanes.has(c.name) && !!c.frame} onEye={c.frame ? () => p.onTogglePlane(c.name) : undefined}
+                onContext={(e) => { e.preventDefault(); p.onPlaneMenu(c.name, e.clientX, e.clientY); }} />
+            ))}
+          </Node>
+        )}
         <Node id="sketches" label={`Sketches (${p.sketches.length})`}>
           {p.sketches.map((s) => <Node key={s.id} id={`sketch-${s.name}`} active={s.active} onDouble={() => p.onEditSketch(s.name)} label={s.name} eye={!p.hiddenSketches.has(s.id)} onEye={() => p.onToggleSketch(s.id)} />)}
         </Node>

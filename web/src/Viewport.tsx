@@ -16,6 +16,7 @@ import { OPEN_ON_DRAG, isDraw, preview as previewOf } from './sketch/tools';
 import { angleLayout, distanceLayout, pointLineLayout } from './sketch/dimGeometry';
 import type { EdgeGeometry } from '../../server/src/engine/meshEdges';
 import { applyTyped, sizeBoxes } from './sketch/tools';
+import type { ConstructionPlane } from './api';
 import type { EdgeRef, Mode, PlanePick, ProfileRef, Tool, ViewApi } from './ui';
 
 export interface FacePick { body: string; face: number; point: Vec3 }
@@ -37,6 +38,9 @@ interface Props {
   hiddenBodies: Set<string>;
   hiddenSketches: Set<number>;
   showOrigin: boolean;
+  /** Construction planes (Offset Plane and so on): drawn unless hidden, and chosen like the origin planes when a sketch plane is being picked. */
+  constPlanes?: ConstructionPlane[];
+  hiddenPlanes?: Set<string>;
   showGrid: boolean;
   showAxes: boolean;
   showEdges: boolean;
@@ -312,9 +316,20 @@ export function Viewport(props: Props) {
     const rebuildPlanes = () => {
       clear(gPlanes); planeMeshes = []; planeLayer.replaceChildren(); planeLabels = [];
       const p = P.current;
-      if (!(p.mode === 'pickPlane' || p.showOrigin)) return;
+      const mine = (p.constPlanes ?? []).filter((c) => c.frame && !c.suppressed && !p.hiddenPlanes?.has(c.name));
+      if (!(p.mode === 'pickPlane' || p.showOrigin || mine.length)) return;
       const r = modelRadius();
       const colors: Record<string, string> = { XY: '#4f8fe0', XZ: '#4caf7a', YZ: '#e0605a' };
+      for (const c of mine) { // construction planes: amber, labelled with their name
+        const fr = c.frame!, pl = { origin: fr.origin, xDir: fr.xDir, yDir: fr.yDir } as Plane;
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 1.3, r * 1.3), new THREE.MeshBasicMaterial({ color: '#e0a63a', transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+        m.matrixAutoUpdate = false; m.matrix.copy(planeMatrix(pl)); m.userData.plane = c.name;
+        m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: '#e0a63a', transparent: true, opacity: 0.9 })));
+        gPlanes.add(m); if (p.mode === 'pickPlane') planeMeshes.push(m);
+        const label = document.createElement('span'); label.className = 'planelabel'; label.style.color = '#e0a63a'; label.textContent = c.name;
+        planeLayer.appendChild(label); planeLabels.push({ el: label, w: v3(toWorld(pl, [r * 0.5, r * 0.5])) });
+      }
+      if (!(p.mode === 'pickPlane' || p.showOrigin)) return;
       for (const key of ['XY', 'XZ', 'YZ'] as const) {
         const pl = ORIGIN_PLANES[key];
         const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 1.6, r * 1.6), new THREE.MeshBasicMaterial({ color: colors[key]!, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
@@ -797,7 +812,7 @@ export function Viewport(props: Props) {
   const p = props;
   useEffect(() => { S.current?.rebuild('bodies'); (S.current as any)?.fitOnce?.(); }, [p.bodies, p.hiddenBodies, p.selectedFaces, p.selectedBodies, p.showEdges, p.theme, p.mode === 'pickPlane']);
   useEffect(() => { S.current?.rebuild('sketches'); }, [p.sketches, p.hiddenSketches, p.mode, p.tool, p.showProfiles, p.selectedProfiles, p.theme, p.showDims]);
-  useEffect(() => { S.current?.rebuild('planes'); }, [p.mode, p.showOrigin, p.bodies, p.theme]);
+  useEffect(() => { S.current?.rebuild('planes'); }, [p.mode, p.showOrigin, p.bodies, p.theme, p.constPlanes, p.hiddenPlanes]);
   useEffect(() => { S.current?.rebuild('preview'); }, [p.pending, p.tool, p.mode, p.activeSketch, p.pickMode, p.highlight, p.showPoints, p.extraPreview, p.sizes?.join('|')]);
   useEffect(() => { S.current?.rebuild('camera'); }, [p.mode, p.activeSketch?.id]);
   useEffect(() => { S.current?.rebuild('handle'); }, [p.handle?.origin.join(), p.handle?.dir.join(), p.handle?.value, p.handles?.map((h) => `${h.origin.join()}|${h.dir.join()}|${h.value}|${h.base}|${h.fixed}`).join(';'), p.theme]);

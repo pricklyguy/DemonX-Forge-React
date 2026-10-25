@@ -31,12 +31,15 @@ interface Props {
   onCylinder(): void;
   onSphere(): void;
   onTorus(): void;
+  onPlaneOffset(): void;
+  onPlaneAngle(): void;
+  onPlaneMid(): void;
   onExport(): void;
   onSlicer(): void;
   onScale(): void;
   canModify: boolean;
   /** The Modify tool whose dialog is open, if any. */
-  modTool: 'fillet' | 'chamfer' | 'presspull' | 'shell' | 'offsetface' | 'draft' | 'hole' | 'thread' | 'mirror' | 'rpattern' | 'cpattern' | 'combine' | 'move' | 'split' | 'scale' | 'coil' | 'meshconv' | 'box' | 'cylinder' | 'sphere' | 'torus' | null;
+  modTool: 'fillet' | 'chamfer' | 'presspull' | 'shell' | 'offsetface' | 'draft' | 'hole' | 'thread' | 'mirror' | 'rpattern' | 'cpattern' | 'combine' | 'move' | 'split' | 'scale' | 'coil' | 'meshconv' | 'box' | 'cylinder' | 'sphere' | 'torus' | 'planeOffset' | 'planeAngle' | 'planeMid' | null;
   onFillet(): void;
   onChamfer(): void;
   onPressPull(): void;
@@ -127,6 +130,11 @@ export function Ribbon(p: Props) {
     { id: 'btn-scale', icon: <Icon.bScale />, label: 'Scale', pressed: p.modTool === 'scale', disabled: !p.canModify, onClick: p.onScale },
     { id: 'btn-thread', icon: <Icon.bThread />, label: 'Thread', pressed: p.modTool === 'thread', disabled: !p.canModify, onClick: p.onThread },
   ];
+  const construct: Cmd[] = [
+    { id: 'btn-plane-offset', pinned: true, icon: <Icon.bPlane />, label: 'Offset Plane', pressed: p.modTool === 'planeOffset', onClick: p.onPlaneOffset },
+    { id: 'btn-plane-angle', icon: <Icon.bPlaneAngle />, label: 'Plane at Angle', pressed: p.modTool === 'planeAngle', onClick: p.onPlaneAngle },
+    { id: 'btn-plane-mid', icon: <Icon.bPlane />, label: 'Midplane', pressed: p.modTool === 'planeMid', onClick: p.onPlaneMid },
+  ];
   const inspect: Cmd[] = [
     { id: 'btn-measure', pinned: true, icon: <Icon.bMeasure />, label: 'Measure', keyHint: 'I', pressed: p.measuring, disabled: !p.canModify, onClick: p.onMeasure },
     { id: 'btn-section', icon: <Icon.bSection />, label: 'Section to DXF', disabled: !p.canModify, onClick: p.onSection },
@@ -162,6 +170,7 @@ export function Ribbon(p: Props) {
     T('ellipse', <Icon.tEllipse />, 'Ellipse', 'ellipse'),
     T('spline', <Icon.tSpline />, 'Fit Point Spline', 'spline'),
     T('point', <Icon.tPoint />, 'Point', 'point'),
+    T('text', <Icon.tText />, 'Text', 'text'),
     { id: 'tool-insert-dxf', icon: <Icon.bImport />, label: 'Insert DXF…', tooltip: 'Put the shapes of a DXF file into this sketch', onClick: () => p.onSketchInsert('dxf') },
     { id: 'tool-insert-svg', icon: <Icon.bImport />, label: 'Insert SVG…', tooltip: 'Put the shapes of an SVG file into this sketch', onClick: () => p.onSketchInsert('svg') },
   ];
@@ -193,6 +202,7 @@ export function Ribbon(p: Props) {
           <>
             <CmdGroup title="CREATE" cmds={create} open={open} setOpen={setOpen} />
             <CmdGroup title="MODIFY" cmds={modify} open={open} setOpen={setOpen} />
+            <CmdGroup title="CONSTRUCT" cmds={construct} open={open} setOpen={setOpen} />
             <div className="rspacer" />
             <CmdGroup title="INSPECT" cmds={inspect} open={open} setOpen={setOpen} />
             <CmdGroup title="INSERT" cmds={insert} open={open} setOpen={setOpen} />

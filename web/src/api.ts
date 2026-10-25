@@ -3,7 +3,7 @@ import type { UpdateInfo } from '../../server/src/update/model';
 
 export type { UpdateInfo } from '../../server/src/update/model';
 
-export type { Doc, Snapshot, Body, Face, Parameter, TimelineItem, Sketch, SketchCurve, SketchPoint, SketchDimension, Profile, Vec2, Vec3 } from '../../server/src/engine/Engine';
+export type { Doc, Snapshot, Body, Face, Parameter, TimelineItem, Sketch, SketchCurve, SketchPoint, SketchDimension, Profile, Vec2, Vec3, ConstructionPlane } from '../../server/src/engine/Engine';
 
 async function call(path: string, body?: unknown): Promise<Snapshot> {
   const r = await fetch(`/api/${path}`, { method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body) });

@@ -114,6 +114,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **0.31.0 (2026-10-25):** sketch Chamfer, Break, Move / Copy, Scale, Mirror, Circular and Rectangular Pattern, Collinear, Symmetry, AutoConstrain, Insert DXF / SVG (`/api/sketch-insert`: text in, engine reads the text, the generic route still refuses the insert commands). Selection-based tools keep the selection when chosen (`chooseTool`). Left for sketches: Text, Project / Intersect, slot variants, tangent circles. Then Construct planes (with a how-to for the owner).
 
+**0.32.0 (2026-10-25):** Text (system fonts by name, never a file: `checkStep` refuses font paths; the font list comes from the browser's `queryLocalFonts`), and Construction planes. `Snapshot.planes` is built in `server/src/engine/constructPlanes.ts` from `timeline.inspect` definitions (offset, at angle, midplane; frames checked against the engine in `server/test/constructPlanes.test.ts`); the generic route now allows `construct.*`. Guide: `docs/guides/construct-planes.md`. Left: three-point / two-edge / path / tangent planes, axes and points, editing a plane from the timeline, editing placed text, Project / Intersect.
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.
