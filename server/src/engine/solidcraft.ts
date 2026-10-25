@@ -215,10 +215,34 @@ export class SolidCraftEngine implements Engine {
 
   newDesign(): Promise<void> { return this.serial(async () => { await this.tool('new_design', {}); this.docName = 'Untitled'; this.groups = []; this.redoGroups = []; }); }
 
-  exportBodies(format: ExportFormat): Promise<Uint8Array> {
+  exportBodies(format: ExportFormat, bodies?: string[]): Promise<Uint8Array> {
     return this.serial(async () => {
       const path = this.tmp(format === 'stla' ? 'stl' : format);
-      try { await this.tool('export', { path, format }); return new Uint8Array(readFileSync(path)); } finally { rmSync(path, { force: true }); }
+      try {
+        if (!bodies?.length) await this.tool('export', { path, format });
+        else if (format === 'stl' || format === 'stla' || format === '3mf') await this.tool('execute', { command: 'file.save_mesh', params: { path, format: format === '3mf' ? '3mf' : 'stl', ascii: format === 'stla', bodies } });
+        else await this.tool('execute', { command: 'file.export', params: { path, format, bodies } });
+        return new Uint8Array(readFileSync(path));
+      } finally { rmSync(path, { force: true }); }
+    });
+  }
+
+  listSlicers(): Promise<{ id: string; name: string }[]> {
+    return this.serial(async () => {
+      const r = await this.tool('execute', { command: 'file.slicers', params: {} });
+      const list = Array.isArray(r?.slicers) ? r.slicers : Array.isArray(r) ? r : [];
+      return list.filter((x: any) => typeof x?.id === 'string' && typeof x?.name === 'string').map((x: any) => ({ id: x.id, name: x.name }));
+    });
+  }
+
+  /** The file stays in the engine's work folder (so the slicer can read it) until Forge is closed. */
+  openInSlicer(a: { bodies?: string[]; format: 'stl' | '3mf'; slicer: string; name: string }): Promise<{ slicer: string; file: string }> {
+    return this.serial(async () => {
+      const dir = join(this.work, `slice${++this.fileNo}`); mkdirSync(dir);
+      const file = `${a.name}.${a.format}`, path = join(dir, file);
+      const r = await this.tool('execute', { command: 'file.save_mesh', params: { path, format: a.format, ...(a.bodies?.length ? { bodies: a.bodies } : {}), slicer: a.slicer } });
+      if (r?.slicer_error) throw new EngineError(`The file was saved but the slicer would not start: ${String(r.slicer_error)}`);
+      return { slicer: String(r?.slicer ?? a.slicer), file };
     });
   }
 

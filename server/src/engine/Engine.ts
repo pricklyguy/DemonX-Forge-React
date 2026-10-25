@@ -133,8 +133,12 @@ export interface Engine {
   /** Replaces the design with the one in a .forge file (FileError when it is not one); the design is then called `name`. */
   load(bytes: Uint8Array, name: string): Promise<void>;
   newDesign(): Promise<void>;
-  /** Every visible body in an exchange format. */
-  exportBodies(format: ExportFormat): Promise<Uint8Array>;
+  /** Every visible body (or just the named ones) in an exchange format. STL cannot carry body names; 3MF keeps each body as its own object. */
+  exportBodies(format: ExportFormat, bodies?: string[]): Promise<Uint8Array>;
+  /** The slicers installed on this computer (an id to give `openInSlicer`, and a name to show). */
+  listSlicers(): Promise<{ id: string; name: string }[]>;
+  /** Save the named bodies (or all) as a mesh and open the file in an installed slicer, found by its id from `listSlicers`. */
+  openInSlicer(args: { bodies?: string[]; format: 'stl' | '3mf'; slicer: string; name: string }): Promise<{ slicer: string; file: string }>;
   /** The shapes of one sketch as an ASCII DXF (millimetres). */
   exportSketchDxf(sketch: string): Promise<Uint8Array>;
   /** A flat face's outline as DXF. The face is picked by body, face index and a point on it. The design is not changed. */

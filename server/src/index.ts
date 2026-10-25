@@ -1,4 +1,5 @@
 // Forge server: runs the engine, answers this computer only, serves the built web app.
+import { zipSync } from 'fflate';
 import { refreshStartFiles } from './update/startFiles';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
@@ -61,6 +62,14 @@ const readBytes = (req: IncomingMessage, max: number) => new Promise<Buffer>((ok
   req.on('end', () => ok(Buffer.concat(parts)));
   req.on('error', bad);
 });
+/** The bodies the browser named: each must exist, once. Undefined means all of them. */
+const chosenBodies = (v: unknown, existing: string[]): string[] | undefined => {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v) || v.length < 1 || v.length > 500 || v.some((x) => typeof x !== 'string')) throw new BadRequest('Choose at least one body');
+  const list = [...new Set(v as string[])];
+  const bad = list.find((b) => !existing.includes(b)); if (bad !== undefined) throw new BadRequest(`There is no body called ${JSON.stringify(bad.slice(0, 60))}`);
+  return list;
+};
 const sendFile = (res: ServerResponse, bytes: Uint8Array, filename: string) => {
   res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': bytes.length, 'x-forge-filename': encodeURIComponent(filename), 'cache-control': 'no-store', 'access-control-expose-headers': 'x-forge-filename' });
   res.end(Buffer.from(bytes));
@@ -128,7 +137,28 @@ async function api(path: string, req: IncomingMessage, res: ServerResponse) {
     const spec = typeof a.format === 'string' ? EXPORTS[a.format] : undefined;
     if (!spec) throw new BadRequest('Unknown export format');
     if (!snap.bodies.length) throw new BadRequest('There is nothing to export yet: make a body first');
-    return sendFile(res, await e.exportBodies(spec.format), `${name}.${spec.ext}`);
+    const bodies = chosenBodies(a.bodies, snap.bodies.map((b) => b.name));
+    if (a.perBody === true) { // one file for each body, in a zip: STL cannot carry body names, so this is the way to keep them apart for printing
+      const names = bodies ?? snap.bodies.map((b) => b.name), used = new Set<string>(), files: Record<string, Uint8Array> = {};
+      for (const b of names) {
+        let f = `${name} ${safeName(b, 'body')}`, n = 1; while (used.has(f.toLowerCase())) f = `${name} ${safeName(b, 'body')} ${++n}`; used.add(f.toLowerCase());
+        files[`${f}.${spec.ext}`] = await e.exportBodies(spec.format, [b]);
+      }
+      return sendFile(res, zipSync(files, { level: 1 }), `${name} bodies.zip`);
+    }
+    return sendFile(res, await e.exportBodies(spec.format, bodies), `${name}${bodies?.length === 1 ? ` ${safeName(bodies[0], 'body')}` : ''}.${spec.ext}`);
+  }
+  if (path === '/api/slicers') return send(res, 200, { slicers: await e.listSlicers() });
+  if (path === '/api/slice') { // save the chosen bodies as a mesh and open it in an installed slicer (only one the engine itself listed: never a path from the browser)
+    if (req.method !== 'POST') throw new BadRequest('POST this');
+    const snap = await e.snapshot();
+    if (!snap.bodies.length) throw new BadRequest('There is nothing to print yet: make a body first');
+    if (a.format !== 'stl' && a.format !== '3mf') throw new BadRequest('A slicer takes STL or 3MF');
+    const slicer = (await e.listSlicers()).find((x) => x.id === a.slicer);
+    if (!slicer) throw new BadRequest('That slicer was not found on this computer');
+    const bodies = chosenBodies(a.bodies, snap.bodies.map((b) => b.name));
+    const r = await e.openInSlicer({ bodies, format: a.format, slicer: slicer.id, name: safeName(a.name, snap.doc.name) });
+    return send(res, 200, { ...r, slicer: slicer.name });
   }
   if (path === '/api/stamp') return send(res, 200, { stamp: await e.stamp() }); // changes whenever the design does: the page asks this to notice edits made by an AI client
   if (path === '/api/commands') { // what an AI client may ask for: the engine's catalogue, limited to the commands the browser may run

@@ -64,6 +64,8 @@ interface Props {
   onFacePick(p: FacePick | null): void;
   /** Extrude and Press Pull: a click on another face sets the distance that reaches it. */
   onFaceSnap?(p: FacePick): void;
+  /** A double-click on a body in the model view selects the whole body (Ctrl or Shift adds). */
+  onBodyPick?(name: string, additive: boolean): void;
   onPlanePick(p: PlanePick): void;
   /** `pt` is snapped for drawing tools and exact for picking tools; `tol` is about 9 screen pixels in sketch units. */
   onSketchClick(pt: Vec2, tol: number, additive: boolean): void;
@@ -725,6 +727,11 @@ export function Viewport(props: Props) {
         if (hit && b && hit.faceIndex != null) p.onFacePick({ body: b.name, face: b.faceIds[hit.faceIndex] ?? 0, point: hit.point.toArray() as Vec3 });
         else p.onFacePick(null);
       }
+    });
+    dom.addEventListener('dblclick', (e) => {
+      const p = P.current; if (p.mode !== 'model' || p.measuring) return;
+      setRay(e); const hit = ray.intersectObjects(gBodies.children, false)[0], b = hit && (hit.object.userData.body as Body | undefined);
+      if (b) p.onBodyPick?.(b.name, e.ctrlKey || e.metaKey || e.shiftKey);
     });
     dom.addEventListener('contextmenu', (e) => {
       e.preventDefault(); const q = P.current;

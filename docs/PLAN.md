@@ -108,6 +108,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **Direction (2026-10-25):** this app stays the product. The `codex/fusion-parity` branch (SolidCraft's native app with a DemonX cover) stays on its branch for reference and tinkering; nothing is merged from it except ideas and small fixes. See `docs/evaluation/ALTERNATE-BUILD.md` for what it has that we do not and the order to bring those over: 0.28.0 Box, Cylinder, Sphere; next body rename/select and per-body export (STL zip, 3MF) and open in slicer, then Construct planes, then more sketch tools.
 
+**0.29.0 (2026-10-25):** Torus; whole-body select and rename; export of chosen bodies (zip of one STL per body, 3MF); Open in slicer through the engine's `file.slicers` and `file.save_mesh slicer` (only an id the engine listed is accepted); `body.rename` allowed, plus a deny list for engine commands that touch files. Torus joins are slow in the engine (9 s for an overlapping join), so Torus starts as a New Body. Next on the list: Construct planes, more sketch tools (see `docs/evaluation/ALTERNATE-BUILD.md`).
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.

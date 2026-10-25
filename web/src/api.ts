@@ -34,6 +34,22 @@ async function fileCall(path: string, body: unknown): Promise<{ data: ArrayBuffe
 export const api = {
   /** The design as .forge bytes, called `name` from now on. */
   save: (name: string) => fileCall('save', { name }),
+  /** The chosen bodies (or all) in one file, or as a zip with one file for each body. */
+  exportBodies: (o: { format: string; bodies: string[]; perBody: boolean }) => fileCall('export', o),
+  /** The slicers installed on this computer. */
+  slicers: async (): Promise<{ id: string; name: string }[]> => {
+    const r = await fetch('/api/slicers', { method: 'POST', body: '{}' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}`);
+    return j.slicers ?? [];
+  },
+  /** Save the chosen bodies as a mesh and open it in an installed slicer. */
+  openInSlicer: async (o: { format: 'stl' | '3mf'; bodies: string[]; slicer: string }): Promise<{ slicer: string; file: string }> => {
+    const r = await fetch('/api/slice', { method: 'POST', body: JSON.stringify(o) });
+    const j = await r.json().catch(() => ({ error: `The server answered ${r.status}` }));
+    if (!r.ok) throw new Error(j.error ?? `The server answered ${r.status}`);
+    return j;
+  },
   exportAs: (format: string, sketch?: string) => fileCall('export', { format, ...(sketch ? { sketch } : {}) }),
   /** A flat face's outline as DXF (the design is not changed). */
   exportFaceDxf: (face: { body: string; index: number; point: Vec3 }) => fileCall('export', { format: 'dxf', face }),

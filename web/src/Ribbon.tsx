@@ -25,10 +25,13 @@ interface Props {
   onBox(): void;
   onCylinder(): void;
   onSphere(): void;
+  onTorus(): void;
+  onExport(): void;
+  onSlicer(): void;
   onScale(): void;
   canModify: boolean;
   /** The Modify tool whose dialog is open, if any. */
-  modTool: 'fillet' | 'chamfer' | 'presspull' | 'shell' | 'offsetface' | 'draft' | 'hole' | 'thread' | 'mirror' | 'rpattern' | 'cpattern' | 'combine' | 'move' | 'split' | 'scale' | 'coil' | 'meshconv' | 'box' | 'cylinder' | 'sphere' | null;
+  modTool: 'fillet' | 'chamfer' | 'presspull' | 'shell' | 'offsetface' | 'draft' | 'hole' | 'thread' | 'mirror' | 'rpattern' | 'cpattern' | 'combine' | 'move' | 'split' | 'scale' | 'coil' | 'meshconv' | 'box' | 'cylinder' | 'sphere' | 'torus' | null;
   onFillet(): void;
   onChamfer(): void;
   onPressPull(): void;
@@ -93,6 +96,7 @@ export function Ribbon(p: Props) {
     { id: 'btn-box', pinned: true, icon: <Icon.bBox />, label: 'Box', pressed: p.modTool === 'box', onClick: p.onBox },
     { id: 'btn-cylinder', pinned: true, icon: <Icon.bCylinder />, label: 'Cylinder', pressed: p.modTool === 'cylinder', onClick: p.onCylinder },
     { id: 'btn-sphere', pinned: true, icon: <Icon.bSphere />, label: 'Sphere', pressed: p.modTool === 'sphere', onClick: p.onSphere },
+    { id: 'btn-torus', pinned: true, icon: <Icon.bTorus />, label: 'Torus', pressed: p.modTool === 'torus', onClick: p.onTorus },
     { id: 'btn-sweep', icon: <Icon.sweep />, label: 'Sweep', pressed: p.extKind === 'sweep', onClick: p.onSweep },
     { id: 'btn-loft', icon: <Icon.loft />, label: 'Loft', pressed: p.extKind === 'loft', onClick: p.onLoft },
     { id: 'btn-rib', icon: <Icon.rib />, label: 'Rib', pressed: p.extKind === 'rib', disabled: !p.canModify, onClick: p.onRib },
@@ -123,9 +127,12 @@ export function Ribbon(p: Props) {
     { id: 'btn-section', icon: <Icon.bSection />, label: 'Section to DXF', disabled: !p.canModify, onClick: p.onSection },
   ];
   const insert: Cmd[] = [
+    { id: 'btn-export', pinned: true, icon: <Icon.bExport />, label: 'Export', tooltip: 'Export bodies: pick which, STL or 3MF, one file each, or open in a slicer', onClick: p.onExport },
     { id: 'btn-import', pinned: true, icon: <Icon.bImport />, label: 'Import', tooltip: 'Import STEP / IGES / STL / OBJ / 3MF…', onClick: p.onImport },
   ];
   const meshTools: Cmd[] = [
+    { id: 'btn-export-mesh', pinned: true, icon: <Icon.bExport />, label: 'Export Mesh', tooltip: 'Export bodies as STL or 3MF, one file or one per body', onClick: p.onExport },
+    { id: 'btn-slicer-mesh', pinned: true, icon: <Icon.bSlicer />, label: 'Open in Slicer', onClick: p.onSlicer },
     { id: 'btn-import-mesh', pinned: true, icon: <Icon.bImport />, label: 'Insert Mesh (STL, OBJ, 3MF)…', onClick: p.onImport },
     { id: 'btn-meshconv-mesh', pinned: true, icon: <Icon.bMesh />, label: 'Mesh to Solid', pressed: p.modTool === 'meshconv', disabled: !p.canModify, onClick: p.onMeshConvert },
     { id: 'btn-scale-mesh', pinned: true, icon: <Icon.bScale />, label: 'Scale', pressed: p.modTool === 'scale', disabled: !p.canModify, onClick: p.onScale },
