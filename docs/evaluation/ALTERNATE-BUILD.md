@@ -8,7 +8,7 @@ Not a second React app. It is the **native SolidCraft desktop app** (Rust, egui)
 
 ## Small things worth taking from the branch's own React/server changes
 
-- `server/src/commands.ts`: an explicit list of engine commands that read or write file paths (`sketch.export_dxf`, `sketch.insert_dxf`, `sketch.insert_svg`, `sketch.text`, `sketch.edit_text`, `parameters.export/import`, `timeline.export_script`, `component.insert_design/update_links/relink`) refused on the generic route, applied to both the batch route and `isAllowedCommand`. Worth having before we open up more command families. Taken with this release.
+- `server/src/commands.ts`: an explicit list of engine commands that read or write file paths (`sketch.export_dxf`, `sketch.insert_dxf`, `sketch.insert_svg`, `sketch.text`, `sketch.edit_text`, `parameters.export/import`, `timeline.export_script`, `component.insert_design/update_links/relink`) refused on the generic route, applied to both the batch route and `isAllowedCommand`. Worth having before we open up more command families. Not done yet: planned for 0.28.0, before the allowed list is widened.
 - The Slot width box is moved out from under the pointer (`web/src/sketch/tools.ts`). Tiny.
 - Not taken: the `single_undo` option and the Scripts runner (they need the native app), the Node 22/vite 8/vitest 5 upgrades (untested here), the native packaging scripts.
 
