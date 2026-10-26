@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/presspull.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,14 +31,14 @@ const top = () => p.evaluate(async () => { const s = await (await fetch('/api/st
 const waitTop = async (z) => { for (let i = 0; i < 60; i++) { if (Math.abs((await top()) - z) < 0.01) return; await settle(250); } };
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 const api = (steps) => p.evaluate(async (steps) => { const r = await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); return r.ok; }, steps);
 const state = () => p.evaluate(async () => (await fetch('/api/state')).json());
 const menu = async (label) => { await p.getByTestId('file-menu').click(); await p.getByTestId('context-menu').waitFor(); await p.getByTestId('context-menu').getByRole('button', { name: label, exact: true }).click(); };
 const dir = mkdtempSync(join(tmpdir(), 'forge-e2e-'));
 await api([{ command: 'sketch.create', params: { plane: 'XY', name: 'S1' } }, { command: 'sketch.rectangle.two_point', params: { p0: [0, 0], p1: [40, 30] } }, { command: 'sketch.circle.center', params: { center: [20, 15], diameter: 8 } }, { command: 'sketch.finish' },
   { command: 'solid.extrude', params: { sketch: 'S1', profiles: [0], distance: 10, operation: 'new' } }]);
-await p.reload();
+await p.reload(); await ready(p);
 await p.getByTestId('timeline').waitFor({ timeout: 30000 });
 await settle(1000);
 const box = (st) => { const q = st.bodies[0].positions; const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9]; for (let i = 0; i < q.length; i++) { lo[i % 3] = Math.min(lo[i % 3], q[i]); hi[i % 3] = Math.max(hi[i % 3], q[i]); } return [...lo, ...hi].map((v) => Math.round(v)).join(','); };
@@ -48,7 +49,7 @@ const stepBytes = await p.evaluate(async () => { const r = await fetch('/api/exp
 const stepFile = join(dir, 'Plate One.step'); writeFileSync(stepFile, Buffer.from(stepBytes));
 check(stepBytes.length > 500, 'a STEP file was exported', `${stepBytes.length} bytes`);
 await p.evaluate(() => fetch('/api/new', { method: 'POST', body: '{}' }));
-await p.reload(); await p.getByTestId('demo').waitFor({ timeout: 30000 }); await settle(800);
+await p.reload(); await ready(p); await ready(p); await settle(800);
 check((await state()).bodies.length === 0, 'a fresh, empty design');
 let chooser = p.waitForEvent('filechooser');
 await menu('Import STEP / IGES / STL…');

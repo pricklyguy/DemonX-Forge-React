@@ -3,7 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/edit.mjs           Screenshots go to $SHOTS (default /tmp).
-import { waitAsync } from './wait.mjs';
+import { waitAsync, ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -25,7 +25,7 @@ const names = async () => (await state()).timeline.map((t) => t.name);
 
 // ---- build: a 40 x 30 rectangle extruded 10
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.getByTestId('btn-sketch').click();
 const [px, py] = await p.evaluate(() => window.__forge.project([40, -40, 0]));
 await p.mouse.move(px, py); await p.mouse.click(px, py);

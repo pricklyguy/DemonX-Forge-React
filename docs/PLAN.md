@@ -120,6 +120,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **0.34.0 (2026-10-26):** owner test notes. Text previews live (made, undone and made again while the box is open; `textPrev` in App); measured length labels hide when the piece is under 34 px (`size` on each label); face beats plane sheet when choosing a sketch plane, with a preference to hide the sheets and a hover preview; tool options strip (`web/src/ToolOptions.tsx`) with the sisters of each drawing tool; Midpoint Line. Slicer notes: Bambu's 3MF warning is its normal message for 3MF from other programs; the slicer window not coming to the front is Windows' focus rule for a program started by another. Ideas not done: draw-as-construction mode, Line Type buttons.
 
+**0.35.0 (2026-10-26):** launch on the full Start page (the in-view panel is gone); a "working" veil (`working` in App, and the update progress); sketch visibility goes through the engine's `browser.visibility` (allowed on the generic route) because the engine hides a sketch once a feature uses it; snap references in `Viewport` (`refCurves`: straight body edges lying in the sketch plane, and coplanar curves of other visible sketches); preferences for the origin planes and sketch axes. e2e scripts now call `ready(p)` (`e2e/wait.mjs`) instead of waiting for the old demo button.
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.

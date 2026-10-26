@@ -342,18 +342,22 @@ export function App() {
   const [extKind, setExtKind] = useState<ExtKind>('extrude'); // Revolve, Sweep and Loft share the Extrude dialog: profiles first, then what each needs
   const [hiddenBodies, setHiddenBodies] = useState<Set<string>>(new Set());
   const [hiddenSketches, setHiddenSketches] = useState<Set<number>>(new Set());
-  const [showOrigin, setShowOrigin] = useState(false);
+  const [showOrigin, setShowOrigin] = useState(() => { try { return localStorage.getItem('forge-origin') === 'true'; } catch { return false; } }); // the origin planes drawn in the 3D view
+  useEffect(() => { try { localStorage.setItem('forge-origin', String(showOrigin)); } catch { /* Storage may be unavailable. */ } }, [showOrigin]);
   const [hiddenPlanes, setHiddenPlanes] = useState<Set<string>>(new Set());
   const [planeMenu, setPlaneMenu] = useState<{ x: number; y: number; name: string } | null>(null);
   const [showGrid, setShowGrid] = useState(() => { try { return localStorage.getItem('forge-grid') !== 'false'; } catch { return true; } });
-  const [showAxes, setShowAxes] = useState(true);
+  const [showAxes, setShowAxes] = useState(() => { try { return localStorage.getItem('forge-axes') !== 'false'; } catch { return true; } }); // the red and green origin lines in a sketch
+  useEffect(() => { try { localStorage.setItem('forge-axes', String(showAxes)); } catch { /* Storage may be unavailable. */ } }, [showAxes]);
   const [showStart, setShowStart] = useState(() => { try { return localStorage.getItem('forge-show-start') !== 'false'; } catch { return true; } }); // the message and demo button on an empty design
   useEffect(() => { try { localStorage.setItem('forge-show-start', String(showStart)); } catch { /* Storage may be unavailable. */ } }, [showStart]);
   const [planeSheets, setPlaneSheets] = useState(() => { try { return localStorage.getItem('forge-plane-sheets') !== 'false'; } catch { return true; } }); // the origin planes drawn as sheets while a sketch plane is chosen
   useEffect(() => { try { localStorage.setItem('forge-plane-sheets', String(planeSheets)); } catch { /* Storage may be unavailable. */ } }, [planeSheets]);
   const [hoverPlane, setHoverPlane] = useState<string | null>(null);
+  const [working, setWorking] = useState<string | null>(null); // what is being done, for a message that shows when it takes a moment
+  const withWorking = async <T,>(text: string, f: () => Promise<T>): Promise<T> => { setWorking(text); try { return await f(); } finally { setWorking(null); } };
   const [showPrefs, setShowPrefs] = useState(false);
-  const [showStartPage, setShowStartPage] = useState(false); // the full Start page over the design (the Home button)
+  const [showStartPage, setShowStartPage] = useState(() => { try { return localStorage.getItem('forge-show-start') !== 'false'; } catch { return true; } }); // the full Start page: shown when Forge opens (if the preference is on), and from the Home button
   const [recents, setRecents] = useState<RecentItem[]>([]);
   useEffect(() => { void listRecents().then(setRecents); }, []);
   useEffect(() => { try { localStorage.setItem('forge-grid', String(showGrid)); } catch { /* Storage may be unavailable. */ } }, [showGrid]);
@@ -1137,11 +1141,12 @@ export function App() {
       const h = r.handle as (Handle & { requestPermission?: (o: { mode: string }) => Promise<string> }) | null;
       if (!h) { setShowStartPage(false); doOpen(); return; } // no file kept (the browser could not): choose it again
       if (h.requestPermission && (await h.requestPermission({ mode: 'readwrite' })) !== 'granted') { setError('Forge was not allowed to read that file: use Open… and choose it'); return; }
+      setWorking(`Opening ${r.name}…`); // the browser reads the file first
       await noPreviewPending();
       const file = await h.getFile(), data = await file.arrayBuffer();
-      const s = await run(() => api.open(data, stripExt(file.name)));
+      const s = await withWorking(`Opening ${file.name}…`, () => run(() => api.open(data, stripExt(file.name))));
       if (s) { fileHandle.current = h; resetAfterLoad(); setShowStartPage(false); setNotice(`Opened ${file.name}`); void remember(stripExt(file.name), h, 1400); }
-    } catch (e) { setError(`That file could not be opened (${(e as Error).message}). Use Open… and choose it.`); }
+    } catch (e) { setError(`That file could not be opened (${(e as Error).message}). Use Open… and choose it.`); } finally { setWorking(null); }
   })(); });
   const guardUnsaved = (go: () => void) => { if (snap.doc.dirty) setConfirm({ text: 'Discard the unsaved changes?', label: 'Discard', ok: () => { setConfirm(null); go(); } }); else go(); };
   const doNew = () => guardUnsaved(() => { void (async () => {
@@ -1155,7 +1160,7 @@ export function App() {
       const picked = await pickOpenFile([FORGE_TYPE]);
       if (!picked) return;
       const data = await picked.file.arrayBuffer();
-      const s = await run(() => api.open(data, stripExt(picked.file.name)));
+      const s = await withWorking(`Opening ${picked.file.name}…`, () => run(() => api.open(data, stripExt(picked.file.name))));
       if (s) { fileHandle.current = picked.handle; resetAfterLoad(); setNotice(`Opened ${picked.file.name}`); setShowStartPage(false); void remember(stripExt(picked.file.name), picked.handle, 1400); }
     } catch (e) { setError((e as Error).message); }
   })(); });
@@ -1170,7 +1175,7 @@ export function App() {
       if (!['step', 'stp', 'iges', 'igs', 'stl', 'obj', '3mf'].includes(ext)) { setError('Choose a STEP, IGES, STL, OBJ or 3MF file (.step .stp .iges .igs .stl .obj .3mf)'); return; }
       const data = await picked.file.arrayBuffer();
       const before = new Set(snap.bodies.map((b) => b.name));
-      const s = await run(() => api.importModel(data, stripExt(picked.file.name), ext));
+      const s = await withWorking(`Importing ${picked.file.name}…`, () => run(() => api.importModel(data, stripExt(picked.file.name), ext)));
       if (s) {
         setNotice(`Imported ${picked.file.name}`); setTimeout(() => viewApi.current?.setView('home'), 80);
         const fresh = s.bodies.filter((b) => !before.has(b.name) && b.mesh); // a mesh file carries its own coordinates: ask where to put it
@@ -1549,7 +1554,7 @@ export function App() {
       <Ribbon mode={mode} tool={tool} canHole={snap.bodies.length > 0 && mode !== 'pickPlane'} canModify={snap.bodies.length > 0 && mode !== 'pickPlane'} modTool={mode === 'modify' ? modTool : null} extKind={mode === 'extrude' ? extKind : null} onFillet={() => void startModify('fillet')} onChamfer={() => void startModify('chamfer')} onPressPull={() => void startModify('presspull')} onShell={() => void startModify('shell')} onOffsetFace={() => void startModify('offsetface')} onDraft={() => void startModify('draft')} onCombine={() => void startModify('combine')} onMirror={() => void startModify('mirror')} onRPattern={() => void startModify('rpattern')} onCPattern={() => void startModify('cpattern')} onCreateSketch={createSketch} onExtrude={() => void startExtrude('extrude')} onRevolve={() => void startExtrude('revolve')} onSweep={() => void startExtrude('sweep')} onLoft={() => void startExtrude('loft')} onHole={() => void startModify('hole')} onThread={() => void startModify('thread')} onMove={() => void startModify('move')} onSplit={() => void startModify('split')} onRib={() => void startExtrude('rib')} onPipe={() => void startExtrude('pipe')} onEmboss={() => void startExtrude('emboss')} onCoil={() => void startModify('coil')} onSketchMove={sketchMove} onSketchScale={sketchScale} onSketchRectPattern={sketchRectPattern} onSketchAuto={sketchAuto} onSketchInsert={sketchInsert} onBox={() => void startModify('box')} onCylinder={() => void startModify('cylinder')} onSphere={() => void startModify('sphere')} onTorus={() => void startModify('torus')} onPlaneOffset={() => void startModify('planeOffset')} onPlaneAngle={() => void startModify('planeAngle')} onPlaneMid={() => void startModify('planeMid')} onExport={() => openExport(false)} onSlicer={() => openExport(true)} onScale={() => void startModify('scale')} onMeshConvert={() => void startModify('meshconv')} onTool={(t) => chooseTool(t)} onFinish={() => void finishSketch()} measuring={measure !== null} onMeasure={() => void startMeasure()} onSection={() => setSection({ plane: 'XZ', offset: '0', body: snap.bodies[0]?.name ?? '' })} onImport={doImport} />
 
       <Browser planes={snap.planes} hiddenPlanes={hiddenPlanes} onTogglePlane={(n) => setHiddenPlanes((h) => toggle(h, n))} onPlaneMenu={(n, x, y) => setPlaneMenu({ x, y, name: n })} docName={snap.doc.name} bodies={snap.bodies} sketches={snap.sketches} parameters={snap.parameters} hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} busy={busy}
-        onToggleBody={(n) => setHiddenBodies((s) => toggle(s, n))} onToggleSketch={(i) => setHiddenSketches((s) => toggle(s, i))} onToggleOrigin={() => setShowOrigin((v) => !v)} pickingPlane={mode === 'pickPlane'} onPickPlane={(plane) => planePicked({ plane })} onEditSketch={(n) => void editSketch(n)}
+        onToggleBody={(n) => setHiddenBodies((s) => toggle(s, n))} onToggleSketch={(i) => { const k = snap.sketches.find((q) => q.id === i); if (k) send([{ command: 'browser.visibility', params: { visible: !k.visible, items: [k.name] } }]); }} onToggleOrigin={() => setShowOrigin((v) => !v)} pickingPlane={mode === 'pickPlane'} onPickPlane={(plane) => planePicked({ plane })} onEditSketch={(n) => void editSketch(n)}
         onSetParam={async (name, value) => !!(await run(() => api.param(name, value)))}
         selectedBodies={bodySel} renaming={renaming} onSelectBody={selectBody} onStartRename={(n) => { setBodySel2([n]); setRenaming(n); }} onRenameBody={(a, b) => void renameBody(a, b)} onBodyMenu={(n, x, y) => { if (!bodySel.includes(n)) setBodySel2([n]); setBodyMenu({ x, y, name: n }); }} />
 
@@ -1685,8 +1690,10 @@ export function App() {
             <div className="dhead">PREFERENCES</div>
             <label className="drow"><span>Show initial start options</span><input type="checkbox" aria-label="Show initial start options" data-testid="pref-show-start" checked={showStart} onChange={(e) => setShowStart(e.target.checked)} /></label>
             <label className="drow"><span>Draw the origin planes when choosing a sketch plane</span><input type="checkbox" aria-label="Draw the origin planes when choosing a sketch plane" data-testid="pref-plane-sheets" checked={planeSheets} onChange={(e) => setPlaneSheets(e.target.checked)} /></label>
+            <label className="drow"><span>Show the origin planes in the 3D view</span><input type="checkbox" aria-label="Show the origin planes in the 3D view" data-testid="pref-origin" checked={showOrigin} onChange={(e) => setShowOrigin(e.target.checked)} /></label>
+            <label className="drow"><span>Show the sketch axes (red and green lines)</span><input type="checkbox" aria-label="Show the sketch axes" data-testid="pref-axes" checked={showAxes} onChange={(e) => setShowAxes(e.target.checked)} /></label>
             <div className="dnote">Off: the planes show only while the pointer is on their button in the list, so every face of the part stays open to click. Faces are always picked before a plane sheet.</div>
-            <div className="dnote">The Start page (new, open, recent designs, samples) shown in place of an empty view. Turn this off for a clean, empty view. The Home button next to the logo still opens it. Remembered on this computer.</div>
+            <div className="dnote">Opens the Start page (new, open, recent designs, samples) when Forge starts. Turn this off to go straight to an empty design. The Home button next to the logo still opens it. Remembered on this computer.</div>
             <div className="dbtns"><button className="primary" data-testid="prefs-close" onClick={() => setShowPrefs(false)}>Done</button></div>
           </div>
         )}
@@ -1742,19 +1749,19 @@ export function App() {
         {mode === 'model' && face && (
           <div className="seltip" data-testid="selection">Face {face.index} · {face.planeNormal ? 'plane' : face.cylinder ? `cylinder R${face.cylinder.radius.toFixed(2)}` : 'other'} · area ≈ {face.area.toFixed(1)} mm²</div>
         )}
-        {mode === 'model' && snap.bodies.length === 0 && snap.sketches.length === 0 && showStart && !showStartPage && (
-          <Start recents={recents} busy={busy} onNew={doNew} onOpen={doOpen} onImport={doImport} onDemo={() => void run(api.demo)} onRecent={openRecent} onForget={(r) => void removeRecent(r.id).then(setRecents)} />
-        )}
-      </div>
+              </div>
 
       <Timeline items={snap.timeline} marker={snap.marker} selected={selTl} onSelect={setSelTl} onEdit={editItem} onMenu={(item, x, y) => setMenu({ x, y, item })}
         onRollEnd={() => send([{ command: 'timeline.roll_to', params: {} }])} />
       {showKeys && <ShortcutsDialog onClose={() => setShowKeys(false)} />}
       {showUpdates && <UpdatesDialog info={upd.info} error={upd.error} dirty={snap.doc.dirty} act={upd.act} onClose={() => setShowUpdates(false)} />}
       {viewMenu && <ContextMenu x={viewMenu.x} y={viewMenu.y} items={viewItems()} onClose={() => setViewMenu(null)} />}
+      {(working || (upd.info && (upd.info.apply.state === 'running' || upd.info.apply.state === 'waiting' || upd.info.apply.state === 'done'))) && (
+        <div className="veil" data-testid="working" role="status" aria-live="polite"><div className="veilbox"><span className="spinner" aria-hidden="true" /><span>{working ?? (upd.info!.apply.state === 'done' ? upd.info!.apply.message : `Updating Forge: ${upd.info!.apply.step || 'working'}…`)}</span>{!working && <small>Forge restarts by itself when this finishes. Please wait.</small>}</div></div>
+      )}
       {showStartPage && (
         <Start recents={recents} busy={busy} overlay={{ docName: snap.doc.name, canSave: !busy }} onClose={() => setShowStartPage(false)}
-          onNew={() => { setShowStartPage(false); doNew(); }} onOpen={() => doOpen()} onImport={() => { setShowStartPage(false); doImport(); }} onDemo={() => { setShowStartPage(false); void run(api.demo); }}
+          onNew={() => { setShowStartPage(false); doNew(); }} onOpen={() => doOpen()} onImport={() => { setShowStartPage(false); doImport(); }} onDemo={() => { setShowStartPage(false); void withWorking('Loading the demo bracket…', () => run(api.demo)); }}
           onRecent={openRecent} onForget={(r) => void removeRecent(r.id).then(setRecents)}
           onSave={() => { setShowStartPage(false); void doSave(false); }} onSaveAs={() => { setShowStartPage(false); void doSave(true); }}
           onPrefs={() => { setShowStartPage(false); setShowPrefs(true); }} onKeys={() => { setShowStartPage(false); setShowKeys(true); }} onUpdates={() => { setShowStartPage(false); setShowUpdates(true); void upd.refresh(); }} />

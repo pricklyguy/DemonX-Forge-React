@@ -1,6 +1,7 @@
 // Real-browser check of the Fusion-habit polish (0.22): press-drag draws with a live preview, edges first then Fillet, typing a number right after E.
 // Needs: the engine, a built app (npm run build), and a FRESH server: FORGE_PORT=8120 npm start   (stop it by port: fuser -k 8120/tcp)
 // Run: node e2e/polish.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -18,9 +19,9 @@ const proj = (w) => p.evaluate((w) => window.__forge.project(w), w);
 const api = (steps) => p.evaluate(async (steps) => { await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); }, steps);
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await api([{ command: 'sketch.create', params: { plane: 'XY', name: 'S0' } }]);
-await p.reload(); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(1000);
+await p.reload(); await ready(p); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(1000);
 
 // ---- press, drag and release: the rectangle follows the pointer, then stays
 await p.keyboard.press('r');

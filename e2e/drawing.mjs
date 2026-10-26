@@ -3,6 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/drawing.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -25,7 +26,7 @@ const near = (a, c) => Math.abs(a - c) < 0.01;
 
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.getByTestId('btn-sketch').click();
 const [px, py] = await proj([40, -40, 0]);
 await p.mouse.move(px, py); await p.mouse.click(px, py);
@@ -152,7 +153,7 @@ check(near(hi[0] - lo[0], 30) && near(hi[1] - lo[1], 20), 'and only that 30 x 20
 // ---- two shapes that cross: each piece is its own shape, lit as the mouse passes, and can be extruded alone
 await p.evaluate(() => fetch('/api/new', { method: 'POST', body: '{}' }));
 await p.evaluate(async () => { await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps: [{ command: 'sketch.create', params: { plane: 'XY', name: 'Cross' } }, { command: 'sketch.rectangle.two_point', params: { p0: [0, 0], p1: [40, 30] } }, { command: 'sketch.circle.center', params: { center: [40, 15], diameter: 30 } }, { command: 'sketch.finish' }] }) }); });
-await p.reload(); await p.getByTestId('timeline').waitFor({ timeout: 30000 }); await settle(1200);
+await p.reload(); await ready(p); await p.getByTestId('timeline').waitFor({ timeout: 30000 }); await settle(1200);
 const lens = await proj([33, 15, 0]);
 await p.mouse.move(lens[0] - 30, lens[1]); await settle(200);
 await p.mouse.move(lens[0], lens[1]); await settle(300);

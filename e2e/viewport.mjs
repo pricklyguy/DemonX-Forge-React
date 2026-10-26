@@ -2,7 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/viewport.mjs        Screenshots go to $SHOTS (default /tmp).
-import { waitAsync } from './wait.mjs';
+import { waitAsync, ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -17,11 +17,11 @@ const state = () => p.evaluate(async () => (await fetch('/api/state')).json());
 const proj = (w) => p.evaluate((w) => window.__forge.project(w), w);
 const text = (id) => p.getByTestId(id).innerText();
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 check(/Ready/.test(await text('status')), 'empty design starts ready');
 check((await text('timeline')).includes('Timeline is empty'), 'empty timeline');
 
-await p.getByTestId('demo').click();
+await p.getByTestId('home-button').click(); await p.getByTestId('demo').click(); // the sample is on the Start page
 await p.getByTestId('timeline').locator('[data-name=Fillet1]').waitFor({ timeout: 60000 });
 check((await p.getByTestId('timeline-item').count()) === 5, 'demo builds a 5-step timeline');
 check((await p.locator('#p-width').inputValue()) === '60 mm', 'the width parameter is listed in the browser');

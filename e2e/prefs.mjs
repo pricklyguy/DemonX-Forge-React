@@ -1,4 +1,4 @@
-// Real-browser check of the Preferences dialog: turning off "Show initial start options" removes the empty-design message and demo button, and it is remembered.
+// Real-browser check of the Preferences dialog: "Show initial start options" decides whether Forge opens on the Start page, and the choices are remembered.
 // Needs: a built app (npm run build) and a FRESH server with the engine:   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/prefs.mjs
 import { chromium } from 'playwright';
@@ -12,18 +12,28 @@ const p = await ctx.newPage();
 p.on('pageerror', (e) => { console.log('PAGE ERROR', e.message); failed++; });
 const settle = (ms = 400) => p.waitForTimeout(ms);
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
-check(true, 'the start options show on an empty design by default');
+await p.getByTestId('file-menu').waitFor({ timeout: 30000 }); await settle();
+check(await p.getByTestId('start-overlay').isVisible(), 'Forge opens on the Start page by default');
+check(await p.getByTestId('demo').isVisible() && await p.getByTestId('start-page').isVisible(), 'with New, Open, Recent and the sample on it');
+await p.keyboard.press('Escape'); await settle();
+check(!(await p.getByTestId('start-overlay').isVisible().catch(() => false)) && await p.getByTestId('btn-sketch').isEnabled(), 'Esc goes to the design');
 await p.getByTestId('file-menu').click(); await p.getByText('Preferences…').click();
 check(await p.getByTestId('prefs-dialog').isVisible() && await p.getByTestId('pref-show-start').isChecked(), 'File > Preferences… opens the dialog with the box ticked');
 await p.getByTestId('pref-show-start').uncheck(); await settle();
-check(await p.getByTestId('demo').count() === 0, 'unticking removes the message and the demo button');
 await p.keyboard.press('Escape'); await settle();
 check(!(await p.getByTestId('prefs-dialog').isVisible().catch(() => false)), 'Esc closes the dialog');
-await p.reload(); await p.getByTestId('file-menu').waitFor({ timeout: 30000 }); await settle(1500);
-check(await p.getByTestId('demo').count() === 0, 'it is still off after reloading the page');
+await p.reload(); await p.getByTestId('file-menu').waitFor({ timeout: 30000 }); await settle(1200);
+check(!(await p.getByTestId('start-overlay').isVisible().catch(() => false)), 'with the box unticked Forge opens on the design');
+await p.getByTestId('home-button').click();
+check(await p.getByTestId('start-overlay').isVisible(), 'the Home button still opens the Start page');
+await p.keyboard.press('Escape');
+// the other choices stay put after a reload
 await p.getByTestId('file-menu').click(); await p.getByText('Preferences…').click();
-await p.getByTestId('pref-show-start').check(); await settle();
-check(await p.getByTestId('demo').count() === 1, 'ticking it again brings the start options back');
+check(!(await p.getByTestId('pref-origin').isChecked()) && await p.getByTestId('pref-axes').isChecked(), 'the origin planes start hidden and the sketch axes shown');
+await p.getByTestId('pref-origin').check(); await p.getByTestId('pref-axes').uncheck(); await p.getByTestId('pref-show-start').check(); await settle(); await p.keyboard.press('Escape');
+await p.reload(); await p.getByTestId('file-menu').waitFor({ timeout: 30000 }); await settle(1200);
+check(await p.getByTestId('start-overlay').isVisible(), 'ticking the box again brings the Start page back at launch');
+await p.keyboard.press('Escape'); await p.getByTestId('file-menu').click(); await p.getByText('Preferences…').click();
+check(await p.getByTestId('pref-origin').isChecked() && !(await p.getByTestId('pref-axes').isChecked()), 'the origin and axes choices are remembered');
 console.log(failed ? `== prefs: ${failed} FAILED` : '== prefs: all passed');
 await b.close(); process.exit(failed ? 1 : 0);

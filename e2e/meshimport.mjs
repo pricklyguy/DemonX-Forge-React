@@ -4,6 +4,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/meshimport.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { pick, enabled } from './menu.mjs';
 import { chromium } from 'playwright';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -27,12 +28,12 @@ const waitTrue = async (f) => { for (let i = 0; i < 80; i++) { if (await f()) re
 const api = (steps) => p.evaluate(async (steps) => { const r = await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); return r.ok; }, steps);
 const menu = async (label) => { await p.getByTestId('file-menu').click(); await p.getByTestId('context-menu').waitFor(); await p.getByTestId('context-menu').getByRole('button', { name: label, exact: true }).click(); };
 const exportStl = () => p.evaluate(async () => Array.from(new Uint8Array(await (await fetch('/api/export', { method: 'POST', body: JSON.stringify({ format: 'stl' }) })).arrayBuffer())));
-const fresh = async () => { await p.evaluate(() => fetch('/api/new', { method: 'POST', body: '{}' })); await p.reload(); await p.getByTestId('demo').waitFor({ timeout: 30000 }); await settle(600); };
+const fresh = async () => { await p.evaluate(() => fetch('/api/new', { method: 'POST', body: '{}' })); await p.reload(); await ready(p); await ready(p); await settle(600); };
 const importFile = async (file) => { const chooser = p.waitForEvent('filechooser'); await menu('Import STEP / IGES / STL…'); await (await chooser).setFiles(file); };
 const dir = mkdtempSync(join(tmpdir(), 'forge-e2e-mesh-'));
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 // a plate with a hole, made with the real tools, leaves as an STL file
 await api([{ command: 'sketch.create', params: { plane: 'XY', name: 'S1' } }, { command: 'sketch.rectangle.two_point', params: { p0: [0, 0], p1: [40, 30] } }, { command: 'sketch.circle.center', params: { center: [20, 15], radius: 4 } }, { command: 'sketch.finish', params: {} },
   { command: 'solid.extrude', params: { sketch: 'S1', profiles: [0], distance: 10, operation: 'new' } }]);

@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/planepick.mjs
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -15,7 +16,7 @@ const state = () => p.evaluate(async () => (await fetch('/api/state')).json());
 const proj = (w) => p.evaluate((w) => window.__forge.project(w), w);
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.evaluate(async () => { await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps: [{ command: 'solid.box', params: { length: 60, width: 40, height: 20, corner: [0, 0, 0], operation: 'new', body_name: 'Block' } }] }) }); });
 await p.getByTestId('node-body-Block').waitFor({ timeout: 20000 });
 await p.getByText(/changed by another program/).waitFor({ timeout: 20000 }); await settle(2500);

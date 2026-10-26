@@ -3,6 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/files.mjs          Exported files and screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { writeFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { strFromU8, unzipSync } from 'fflate';
@@ -78,7 +79,7 @@ const openMenu = async (p, label) => { await p.getByTestId('file-menu').click();
 {
   const p = await page(true), A = api(p);
   await p.goto(URL);
-  await p.getByTestId('demo').waitFor({ timeout: 30000 });
+  await ready(p);
   check((await text(p, 'docname')).startsWith('Untitled') && !(await p.getByTestId('dirty').count()), 'a new design is called Untitled and has no unsaved marker');
   check(!(await unprevented(p)), 'nothing to lose: closing the tab is not blocked');
   await build(p);
@@ -152,7 +153,7 @@ const openMenu = async (p, label) => { await p.getByTestId('file-menu').click();
   await p.getByTestId('confirm-ok').click(); await settle(p, 800);
   let s = await A.state();
   check(s.timeline.length === 0 && s.bodies.length === 0 && s.doc.name === 'Untitled' && !s.doc.dirty, 'New empties the design and calls it Untitled');
-  check(await p.getByTestId('demo').isVisible(), 'and the empty-design hint is back');
+  check((await p.getByTestId('timeline').innerText()).includes('Timeline is empty'), 'and the timeline is empty again');
   await p.getByTestId('file-menu').click();
   check(await p.getByTestId('context-menu').getByRole('button', { name: 'STEP (.step)', exact: true }).isDisabled(), 'with nothing built, STEP export is greyed out');
   await p.keyboard.press('Escape');
@@ -237,7 +238,7 @@ const openMenu = async (p, label) => { await p.getByTestId('file-menu').click();
   await p.getByTestId('file-menu').waitFor({ timeout: 30000 });
   await openMenu(p, 'New'); // the server still holds the first run's design
   if (await p.getByTestId('confirm').count()) await p.getByTestId('confirm-ok').click();
-  await p.getByTestId('demo').waitFor({ timeout: 30000 });
+  await ready(p);
   await settle(p, 600); // the view moves to its home position after New
   await build(p);
   let dl = p.waitForEvent('download');

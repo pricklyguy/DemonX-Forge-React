@@ -3,6 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/sketchtools.mjs
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 import { pick } from './menu.mjs';
 
@@ -24,7 +25,7 @@ const near = (a, v, tol = 0.02) => Math.abs(a - v) <= Math.abs(v) * tol;
 const has = async (v) => { for (let i = 0; i < 24; i++) { if ((await areas()).some((a) => near(a, v))) return true; await settle(250); } return false; };
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.getByTestId('btn-sketch').click(); await settle();
 const [px, py] = await proj([40, -40, 0]); await p.mouse.move(px, py); await p.mouse.click(px, py);
 await p.getByTestId('tab-sketch').waitFor({ timeout: 15000 }); await settle(900);

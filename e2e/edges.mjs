@@ -2,7 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/edges.mjs          Screenshots go to $SHOTS (default /tmp).
-import { waitAsync } from './wait.mjs';
+import { waitAsync, ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -24,7 +24,7 @@ const text = (id) => p.getByTestId(id).innerText();
 const waitFaces = (n) => waitAsync(p, async (n) => (await (await fetch('/api/state')).json()).bodies[0]?.faces.length === n, n, { timeout: 20000 });
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 check(await p.getByTestId('btn-fillet').isDisabled() && await p.getByTestId('btn-chamfer').isDisabled(), 'Fillet and Chamfer are greyed out until there is a body');
 
 // ---- a 40 x 30 plate with rounded corners (the sketch Fillet tool), extruded 10

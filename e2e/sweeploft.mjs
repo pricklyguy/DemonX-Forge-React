@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/presspull.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { pick, enabled } from './menu.mjs';
 import { chromium } from 'playwright';
 
@@ -26,14 +27,14 @@ const top = () => p.evaluate(async () => { const s = await (await fetch('/api/st
 const waitTop = async (z) => { for (let i = 0; i < 60; i++) { if (Math.abs((await top()) - z) < 0.01) return; await settle(250); } };
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 // the sketches are made through the API (sketching itself is covered by sketch.mjs / sketch2.mjs); the dialogs are driven by hand
 const api = (steps) => p.evaluate(async (steps) => { const r = await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); return r.ok; }, steps);
 await api([
   { command: 'sketch.create', params: { plane: 'XY', name: 'Round' } }, { command: 'sketch.circle.center', params: { center: [0, 0], diameter: 10 } }, { command: 'sketch.finish' },
   { command: 'sketch.create', params: { plane: 'XZ', name: 'Rail' } }, { command: 'sketch.line', params: { points: [[0, 0], [0, -40]] } }, { command: 'sketch.finish' },
 ]);
-await p.reload();
+await p.reload(); await ready(p);
 await p.getByTestId('timeline').waitFor({ timeout: 30000 });
 await settle(800);
 
@@ -70,7 +71,7 @@ await p.keyboard.press('Control+z'); await waitBoxes([]);
 await api([
   { command: 'sketch.create', params: { plane: 'XY', name: 'Top', offset: 30 } }, { command: 'sketch.rectangle.two_point', params: { p0: [-10, -10], p1: [10, 10] } }, { command: 'sketch.finish' },
 ]);
-await p.reload();
+await p.reload(); await ready(p);
 await p.getByTestId('timeline').waitFor({ timeout: 30000 });
 await settle(800);
 await pick(p, 'btn-loft');

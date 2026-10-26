@@ -7,7 +7,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { Body, Sketch, SketchCurve, Vec2, Vec3 } from './api';
 import { loopPolygon, curvePoints } from './sketch/loops';
 import { findRegions } from './sketch/regions';
-import { ORIGIN_PLANES, normalOf, rayToSketch, toWorld, type Plane } from './sketch/plane';
+import { ORIGIN_PLANES, dot as dot3, normalOf, rayToSketch, sub as sub3, toSketch, toWorld, type Plane } from './sketch/plane';
 import { niceStep, round3, snapGrid } from './sketch/snap';
 import { inferSnap, type Inference } from './sketch/inference';
 import type { MeasureItem } from './measure';
@@ -582,12 +582,46 @@ export function Viewport(props: Props) {
       setRay(e);
       return rayToSketch(planeOf(s), [ray.ray.origin.x, ray.ray.origin.y, ray.ray.origin.z], [ray.ray.direction.x, ray.ray.direction.y, ray.ray.direction.z]);
     };
+    // what else a point can snap to: the straight edges of the bodies that lie in this sketch's plane, and the curves of the other sketches that do
+    let refKey: unknown[] = [], refCache: SketchCurve[] = [];
+    const refCurves = (): SketchCurve[] => {
+      const q = P.current, s = q.activeSketch; if (!s) return [];
+      const key = [s.id, s.plane, q.bodies, q.sketches, q.hiddenBodies, q.hiddenSketches];
+      if (key.length === refKey.length && key.every((v, i) => v === refKey[i])) return refCache;
+      const pl = planeOf(s), nn = normalOf(pl), nl = Math.hypot(...nn) || 1, n: Vec3 = [nn[0] / nl, nn[1] / nl, nn[2] / nl];
+      const off = (w: Vec3) => dot3(sub3(w, pl.origin), n), TOL = 0.02, out: SketchCurve[] = [];
+      const base = { construction: false, fullyConstrained: false } as const;
+      const add = (c: Omit<SketchCurve, 'id' | 'construction' | 'fullyConstrained'>) => out.push({ id: `ref${out.length}`, ...base, ...c } as SketchCurve);
+      for (const b of q.bodies) {
+        if (q.hiddenBodies.has(b.name)) continue;
+        for (const e of b.edges) {
+          const chord = Math.hypot(e.end[0] - e.start[0], e.end[1] - e.start[1], e.end[2] - e.start[2]);
+          if (chord > 1e-6 && Math.abs(chord - e.length) < 1e-3 * Math.max(1, e.length) && Math.abs(off(e.start)) < TOL && Math.abs(off(e.end)) < TOL) add({ type: 'line', start: toSketch(pl, e.start), end: toSketch(pl, e.end) });
+        }
+      }
+      for (const o of q.sketches) {
+        if (o.id === s.id || !o.visible || q.hiddenSketches.has(o.id)) continue;
+        const op = planeOf(o), on = normalOf(op), same = Math.abs(dot3(n, on)) / (Math.hypot(...on) || 1);
+        for (const c of o.curves) {
+          if (c.construction) continue;
+          const w = (v?: Vec2) => (v ? toWorld(op, v) : null);
+          if (c.type === 'line') { const a = w(c.start), z = w(c.end); if (a && z && Math.abs(off(a)) < TOL && Math.abs(off(z)) < TOL) add({ type: 'line', start: toSketch(pl, a), end: toSketch(pl, z) }); }
+          else if ((c.type === 'circle' || c.type === 'arc') && c.radius !== undefined && same > 0.999) {
+            const m = w(c.center); if (!m || Math.abs(off(m)) >= TOL) continue;
+            const flip = dot3(n, on) < 0, a = w(c.start), z = w(c.end);
+            if (c.type === 'circle') add({ type: 'circle', center: toSketch(pl, m), radius: c.radius });
+            else if (a && z) add({ type: 'arc', center: toSketch(pl, m), radius: c.radius, start: toSketch(pl, flip ? z : a), end: toSketch(pl, flip ? a : z) });
+          }
+        }
+      }
+      refKey = key; refCache = out; return out;
+    };
     const sketchPoint = (e: { clientX: number; clientY: number }): Vec2 | null => {
       const s = P.current.activeSketch; if (!s) return null;
       const raw = rawPoint(e);
       if (!raw) return null;
       const tol = wpp() * 9, grid = (): Vec2 => (P.current.snap ? snapGrid(raw, niceStep(wpp() * 14)) : ([round3(raw[0]), round3(raw[1])] as Vec2));
-      const hit = inferSnap(raw, s.curves, tol, P.current.pending.length ? P.current.pending[P.current.pending.length - 1] : undefined);
+      const hit = inferSnap(raw, [...s.curves, ...refCurves()], tol, P.current.pending.length ? P.current.pending[P.current.pending.length - 1] : undefined);
       lastSnap = hit;
       if (!hit) return grid();
       if (hit.kind !== 'align') return hit.point;

@@ -3,6 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/offset.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -23,9 +24,9 @@ const solid = (k) => k.curves.filter((c) => c.type === 'line' && !c.construction
 const centroid = (cs) => { const pts = cs.flatMap((c) => [c.start, c.end]); return [pts.reduce((s, q) => s + q[0], 0) / pts.length, pts.reduce((s, q) => s + q[1], 0) / pts.length]; };
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.evaluate(() => fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps: [{ command: 'sketch.create', params: { plane: 'XY', name: 'S1' } }, { command: 'sketch.line', params: { points: [[0, 0], [50, 0], [60, 40], [20, 60], [-10, 30], [0, 0]] } }] }) }));
-await p.reload(); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(800);
+await p.reload(); await ready(p); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(800);
 check(solid(await sketch()).length === 5, 'a five-sided outline is in the open sketch');
 
 // ---- inside: one click on a side, the pointer inside, a click

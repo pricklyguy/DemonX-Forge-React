@@ -1,6 +1,7 @@
 // Real-browser check of the INSPECT tab and the Measure tool: tabs, vertex to vertex, an edge, face to face, Esc.
 // Needs: the engine, a built app (npm run build), and a FRESH server: FORGE_PORT=8120 npm start   (stop it by port: fuser -k 8120/tcp)
 // Run: node e2e/measure.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -17,13 +18,13 @@ const clickWorld = async (w) => { const [x, y] = await proj(w); await p.mouse.mo
 const values = () => p.getByTestId('measure-value').allInnerTexts();
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.evaluate(() => fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps: [
   { command: 'sketch.create', params: { plane: 'XY', name: 'S1' } },
   { command: 'sketch.rectangle.two_point', params: { p0: [0, 0], p1: [40, 30] } },
   { command: 'sketch.finish' },
   { command: 'solid.extrude', params: { sketch: 'S1', profiles: [0], distance: 12, operation: 'new' } }] }) }));
-await p.reload(); await p.getByTestId('btn-extrude').waitFor({ timeout: 30000 }); await settle(1500);
+await p.reload(); await ready(p); await p.getByTestId('btn-extrude').waitFor({ timeout: 30000 }); await settle(1500);
 
 // ---- the ribbon: Create, Modify, Inspect and Insert groups on the SOLID tab, each with a menu; a MESH tab
 check(await p.getByTestId('btn-extrude').isVisible() && await p.getByTestId('btn-measure').isVisible() && await p.getByTestId('btn-import').isVisible(), 'the SOLID tab shows Create, Modify, Inspect (Measure) and Insert (Import)');

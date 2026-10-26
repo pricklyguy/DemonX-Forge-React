@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/shapes.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { pick, enabled } from './menu.mjs';
 import { chromium } from 'playwright';
 
@@ -18,7 +19,7 @@ const text = (id) => p.getByTestId(id).innerText();
 const state = () => p.evaluate(async () => (await fetch('/api/state')).json());
 const api = (steps) => p.evaluate(async (steps) => { const r = await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); return r.ok; }, steps);
 const waitTrue = async (f, n = 60) => { for (let i = 0; i < n; i++) { if (await f()) return true; await settle(250); } return false; };
-const reload = async () => { await p.reload(); await p.getByTestId('timeline').waitFor({ timeout: 30000 }); await settle(1000); };
+const reload = async () => { await p.reload(); await ready(p); await p.getByTestId('timeline').waitFor({ timeout: 30000 }); await settle(1000); };
 const fresh = async () => { await p.evaluate(() => fetch('/api/new', { method: 'POST', body: '{}' })); };
 const boxes = () => p.evaluate(async () => (await (await fetch('/api/state')).json()).bodies.map((b) => { const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9]; for (let i = 0; i < b.positions.length; i++) { lo[i % 3] = Math.min(lo[i % 3], b.positions[i]); hi[i % 3] = Math.max(hi[i % 3], b.positions[i]); } return [...lo, ...hi].map((v) => Math.round(v * 10) / 10).join(','); }).sort());
 const is = async (list) => JSON.stringify(await boxes()) === JSON.stringify(list);
@@ -26,7 +27,7 @@ const waitIs = (list) => waitTrue(() => is(list));
 const names = async () => (await state()).timeline.map((t) => t.name);
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 
 // ---------------- Scale
 await api([{ command: 'solid.box', params: { length: 40, width: 30, height: 10, corner: [0, 0, 0] } }]);

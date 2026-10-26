@@ -4,7 +4,7 @@ import type { CommandStep } from './engine/Engine';
 export class BadRequest extends Error {}
 
 /** Commands the browser may send. File and export commands are not here: they need their own checked routes. */
-const ALLOWED = /^((sketch|solid|mesh|parameters|timeline|model|edit|construct)\.[a-z0-9_.]+|body\.rename)$/;
+const ALLOWED = /^((sketch|solid|mesh|parameters|timeline|model|edit|construct)\.[a-z0-9_.]+|body\.rename|browser\.visibility)$/;
 // These engine commands can read or write paths (or read a font by path). File access goes through Forge's checked upload/download routes instead of
 // the generic modelling endpoint. Keep this list explicit: some engine versions expose file operations outside `file.*`.
 const FILE_COMMANDS = new Set([

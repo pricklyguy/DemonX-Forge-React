@@ -3,6 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/start.mjs
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 
@@ -19,13 +20,16 @@ const until = async (f, n = 40) => { for (let i = 0; i < n; i++) { if (await f()
 const state = () => p.evaluate(async () => (await fetch('/api/state')).json());
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
-check(await p.getByTestId('start-page').isVisible() && await p.getByTestId('recent-none').isVisible(), 'an empty design shows the Start page with nothing recent yet');
-check(await p.getByTestId('btn-sketch').isEnabled(), 'and the ribbon is still usable beside it');
+await p.getByTestId('file-menu').waitFor({ timeout: 30000 }); await settle(500);
+check(await p.getByTestId('start-overlay').isVisible() && await p.getByTestId('recent-none').isVisible(), 'Forge opens on the Start page, with nothing recent yet');
 
+await p.route('**/api/demo', async (r) => { await new Promise((x) => setTimeout(x, 1800)); await r.continue(); }); // a slow load
 await p.getByTestId('demo').click();
+await p.getByTestId('working').waitFor({ timeout: 4000 });
+check(/demo/i.test(await p.getByTestId('working').innerText()), 'a slow load shows a message that it is working', await p.getByTestId('working').innerText());
 check(await until(async () => (await state()).bodies.length > 0), 'the Demo bracket sample loads');
-check(await until(async () => !(await p.getByTestId('start-page').isVisible().catch(() => false))), 'and the Start page steps aside');
+check(await until(async () => (await p.getByTestId('working').count()) === 0), 'and the message goes away');
+check(!(await p.getByTestId('start-overlay').isVisible().catch(() => false)), 'and the Start page closes');
 
 // ---- Home opens it over the design
 await p.getByTestId('home-button').click();

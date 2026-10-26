@@ -10,6 +10,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ready } from './wait.mjs';
 
 const shots = process.env.SHOTS || '/tmp';
 let failed = 0;
@@ -38,7 +39,7 @@ try {
   let i;
   for (let n = 0; n < 40; n++) { i = await info(); if (i.latest) break; await settle(500); }
   check(i.latest?.version === '99.0.0' && i.newer, 'the server found the newer release on the fake list', JSON.stringify(i.latest?.version));
-  await p.reload(); await p.getByTestId('docname').waitFor();
+  await p.reload(); await ready(p); await p.getByTestId('docname').waitFor();
   await p.getByTestId('update-badge').waitFor({ timeout: 10000 });
   check(/^v\d+\.\d+\.\d+/.test(await p.getByTestId('app-version').innerText()), 'the header shows the running version', await p.getByTestId('app-version').innerText());
   check(/Update 99\.0\.0/.test(await p.getByTestId('update-badge').innerText()), 'the header shows an update badge with the version');
@@ -61,7 +62,7 @@ try {
   await p.getByRole('button', { name: 'Skip this version' }).click(); await settle(500);
   check((await info()).skipped === true, 'Skip this version is kept');
   await p.getByRole('button', { name: 'Close' }).click();
-  await p.reload(); await p.getByTestId('docname').waitFor(); await settle(500);
+  await p.reload(); await ready(p); await p.getByTestId('docname').waitFor(); await settle(500);
   check(await p.getByTestId('update-badge').count() === 0, 'a skipped version no longer shows the badge');
   await p.getByTestId('file-menu').click();
   check(await p.getByRole('button', { name: /Updates…/ }).isVisible(), 'File > Updates… is still there to open the window');

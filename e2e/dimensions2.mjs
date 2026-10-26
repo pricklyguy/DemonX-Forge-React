@@ -1,6 +1,7 @@
 // Real-browser check of angle and point-to-point / point-to-line sketch dimensions (Dimension tool, D).
 // Needs: the engine, a built app (npm run build), and a FRESH server: FORGE_PORT=8120 npm start   (stop it by port: fuser -k 8120/tcp)
 // Run: node e2e/dimensions2.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -25,14 +26,14 @@ const entry = async (v, option) => {
 };
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.evaluate(() => fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps: [
   { command: 'sketch.create', params: { plane: 'XY', name: 'S1' } },
   { command: 'sketch.line', params: { points: [[0, 0], [60, 0]] } },
   { command: 'sketch.line', params: { points: [[0, 0], [40, 30]] } },
   { command: 'sketch.line', params: { points: [[-40, 40], [-10, 55]] } },
 ] }) }));
-await p.reload(); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(1000);
+await p.reload(); await ready(p); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(1000);
 
 // ---- angle between two lines
 await p.getByTestId('tool-dimension').click();

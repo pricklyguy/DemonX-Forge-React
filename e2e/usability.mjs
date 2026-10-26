@@ -4,6 +4,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/usability.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -24,9 +25,9 @@ const boxes = async () => (await state()).bodies.map((b) => { const lo = [1e9, 1
 const api = (steps) => p.evaluate(async (steps) => { const r = await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); return r.ok; }, steps);
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await api([{ command: 'solid.box', params: { length: 40, width: 30, height: 10, corner: [0, 0, 0] } }]);
-await p.reload();
+await p.reload(); await ready(p);
 await p.getByTestId('timeline').waitFor({ timeout: 30000 });
 await settle(1000);
 
@@ -77,7 +78,7 @@ await p.keyboard.press('Escape'); await settle(200);
 
 // ---- sketch: snap markers and the rubber band (on a fresh design, so the XY plane is easy to pick)
 await p.evaluate(() => fetch('/api/new', { method: 'POST', body: '{}' }));
-await p.reload(); await p.getByTestId('demo').waitFor({ timeout: 30000 }); await settle(500);
+await p.reload(); await ready(p); await ready(p); await settle(500);
 await p.getByTestId('btn-sketch').click();
 [x, y] = await proj([40, -40, 0]); await p.mouse.move(x, y); await p.mouse.click(x, y);
 await p.getByTestId('tab-sketch').waitFor({ timeout: 15000 }); await settle(700);

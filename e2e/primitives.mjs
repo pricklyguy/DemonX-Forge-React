@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/primitives.mjs
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -20,7 +21,7 @@ const waitBodies = async (n) => { for (let i = 0; i < 60; i++) { if ((await stat
 
 p.on('response', async (r) => { if (r.url().includes('/api/') && process.env.DBG) console.log('RESP', r.request().method(), r.url().replace(URL, ''), r.status(), (r.request().postData() ?? '').slice(0, 160)); });
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 
 // ---- a box in an empty design, named, 30 x 20 x 10 with its corner at the origin
 await p.getByTestId('btn-box').click(); await settle();

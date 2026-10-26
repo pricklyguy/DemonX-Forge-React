@@ -3,6 +3,7 @@
 // Needs: the engine, a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/mcp.mjs
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
@@ -25,7 +26,7 @@ const p = await b.newPage({ viewport: { width: 1440, height: 860 } });
 p.on('pageerror', (e) => { console.log('PAGE ERROR', e.message); failed++; });
 try {
   await p.goto(URL);
-  await p.getByTestId('demo').waitFor({ timeout: 30000 });
+  await ready(p);
 
   const init = (await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } })).result;
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');

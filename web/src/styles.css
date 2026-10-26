@@ -198,3 +198,9 @@ header button.docname:hover:not(:disabled), header button.docname:focus-visible 
  .toolopts button { width: 34px; height: 30px; padding: 0; display: grid; place-items: center; } .toolopts button svg { width: 22px; height: 22px; }
 .toolopts button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 24%, transparent); }
 .toolopts .toline { flex-basis: 100%; font-size: 12px; color: var(--muted); } .toolopts .tosides input { width: 48px; }
+
+.veil { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 55%, transparent); opacity: 0; animation: veilin .2s ease .35s forwards; }
+.veilbox { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 26px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; max-width: 70vw; text-align: center; }
+.veilbox small { color: var(--muted); font-size: 12px; }
+.spinner { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } } @keyframes veilin { to { opacity: 1; } }

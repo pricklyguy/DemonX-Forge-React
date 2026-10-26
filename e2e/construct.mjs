@@ -3,6 +3,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/construct.mjs
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 import { pick } from './menu.mjs';
 
@@ -21,7 +22,7 @@ const until = async (f, n = 40) => { for (let i = 0; i < n; i++) { if (await f()
 const ok = async () => { await dlg().getByRole('button', { name: 'OK' }).click(); await dlg().waitFor({ state: 'hidden', timeout: 20000 }); await settle(500); };
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await p.evaluate(async () => { await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps: [{ command: 'solid.box', params: { length: 30, width: 20, height: 10, corner: [0, 0, 0], operation: 'new', body_name: 'Block' } }] }) }); });
 await p.getByTestId('node-body-Block').waitFor({ timeout: 20000 });
 await p.getByText(/changed by another program/).waitFor({ timeout: 20000 }); await settle(2500);

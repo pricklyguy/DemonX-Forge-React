@@ -4,6 +4,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/bodies.mjs
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 import { unzipSync } from 'fflate';
@@ -25,7 +26,7 @@ const waitNames = async (want) => { for (let i = 0; i < 60; i++) { if (JSON.stri
 const selected = () => p.locator('[data-testid^="node-body-"][aria-selected="true"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('node-body-', '')).sort());
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 await batch([
   { command: 'solid.box', params: { length: 30, width: 20, height: 10, corner: [0, 0, 0], operation: 'new', body_name: 'Block' } },
   { command: 'solid.cylinder', params: { diameter: 8, height: 12, base: [60, 10, 0], axis: 'Z', operation: 'new', body_name: 'Peg' } },

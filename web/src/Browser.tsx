@@ -74,7 +74,7 @@ export function Browser(p: Props) {
           </Node>
         )}
         <Node id="sketches" label={`Sketches (${p.sketches.length})`}>
-          {p.sketches.map((s) => <Node key={s.id} id={`sketch-${s.name}`} active={s.active} onDouble={() => p.onEditSketch(s.name)} label={s.name} eye={!p.hiddenSketches.has(s.id)} onEye={() => p.onToggleSketch(s.id)} />)}
+          {p.sketches.map((s) => <Node key={s.id} id={`sketch-${s.name}`} active={s.active} onDouble={() => p.onEditSketch(s.name)} label={s.name} eye={s.visible} onEye={() => p.onToggleSketch(s.id)} />)}
         </Node>
         <Node id="params" label={`Parameters (${p.parameters.length})`}>
           {p.parameters.map((q) => <ParamRow key={`${q.name}:${q.expression}`} name={q.name} expression={q.expression} disabled={p.busy} onSet={(v) => p.onSetParam(q.name, v)} />)}

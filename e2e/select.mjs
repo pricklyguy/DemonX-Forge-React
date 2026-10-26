@@ -2,6 +2,7 @@
 // Needs: the engine (FORGE_ENGINE or data/engine/), a built app (npm run build), and a FRESH server:
 //   FORGE_PORT=8120 npm start      (stop it afterwards by port: fuser -k 8120/tcp)
 // Run: node e2e/select.mjs      Screenshots go to $SHOTS (default /tmp).
+import { ready } from './wait.mjs';
 import { chromium } from 'playwright';
 
 const URL = process.env.FORGE_URL || 'http://127.0.0.1:8120/';
@@ -26,7 +27,7 @@ const hovered = async () => (await p.evaluate(() => window.__forge.fills())).fil
 const topZ = async () => { const q = (await state()).bodies[0]?.positions ?? []; let m = -1e9; for (let i = 2; i < q.length; i += 3) m = Math.max(m, q[i]); return +m.toFixed(2); };
 
 await p.goto(URL);
-await p.getByTestId('demo').waitFor({ timeout: 30000 });
+await ready(p);
 // an open sketch: a 100 x 60 plate with two circles and a slot (made through the API and left open)
 await p.evaluate(async () => { await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps: [
   { command: 'sketch.create', params: { plane: 'XY', name: 'Face' } },
@@ -34,7 +35,7 @@ await p.evaluate(async () => { await fetch('/api/batch', { method: 'POST', body:
   { command: 'sketch.circle.center', params: { center: [-20, 5], diameter: 12 } },
   { command: 'sketch.circle.center', params: { center: [20, 5], diameter: 12 } },
 ] }) }); });
-await p.reload(); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(1500);
+await p.reload(); await ready(p); await p.getByTestId('tab-sketch').waitFor({ timeout: 30000 }); await settle(1500);
 
 // ---- hover lights a shape in an open sketch; a click selects it
 await moveTo([-35, -15]);                      // inside the plate, away from any curve
