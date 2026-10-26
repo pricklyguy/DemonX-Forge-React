@@ -122,6 +122,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **0.35.0 (2026-10-26):** launch on the full Start page (the in-view panel is gone); a "working" veil (`working` in App, and the update progress); sketch visibility goes through the engine's `browser.visibility` (allowed on the generic route) because the engine hides a sketch once a feature uses it; snap references in `Viewport` (`refCurves`: straight body edges lying in the sketch plane, and coplanar curves of other visible sketches); preferences for the origin planes and sketch axes. e2e scripts now call `ready(p)` (`e2e/wait.mjs`) instead of waiting for the old demo button.
 
+**Packaging direction (2026-10-26, owner):** a more polished, app-like feel is wanted to attract testers; several clicks to start scares off new users. Step 1: try the installable web app (PWA / browser app mode) and judge the feel. Long term: Electron (it runs the existing Node server and engine, gives native menus and file dialogs, and starts everything with one double-click). Tauri was rejected for now because the server is Node. Later: one launcher for the whole DemonX suite, then pick the app. Known costs to plan for: unsigned Windows installers trigger SmartScreen (code signing), a 100+ MB installer, and the updater changes. Nothing built yet.
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.
