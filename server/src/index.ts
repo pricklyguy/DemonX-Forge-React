@@ -42,7 +42,7 @@ const updates = new Updates({
   exit: (code) => { const t = setTimeout(() => process.exit(code), 5000); t.unref(); void (engine?.stop() ?? Promise.resolve()).catch(() => {}).finally(() => process.exit(code)); },
 });
 const EXPORTS: Record<string, { format: ExportFormat; ext: string }> = { step: { format: 'step', ext: 'step' }, stl: { format: 'stl', ext: 'stl' }, stla: { format: 'stla', ext: 'stl' }, '3mf': { format: '3mf', ext: '3mf' }, obj: { format: 'obj', ext: 'obj' } };
-const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.woff2': 'font/woff2' };
+const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
 const send = (res: ServerResponse, code: number, v: unknown) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(v)); };
 const readBody = (req: IncomingMessage) => new Promise<any>((ok, bad) => {
   let n = 0; const parts: Buffer[] = [];
@@ -237,7 +237,8 @@ function serveStatic(pathname: string, res: ServerResponse) {
     if (!existsSync(join(dist, 'index.html'))) { res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('The web app is not built: run npm run build'); }
     res.writeHead(404); return res.end('not found');
   }
-  res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
+  // the service worker must always be fetched fresh so an update of Forge reaches the installed app
+  res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream', ...(rel === 'sw.js' || rel === 'manifest.webmanifest' ? { 'cache-control': 'no-cache' } : {}) });
   res.end(readFileSync(file));
 }
 

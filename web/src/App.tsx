@@ -1,3 +1,4 @@
+import { useInstall } from './install';
 import { chainOrder } from './chain';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildEdgeGeometry } from '../../server/src/engine/meshEdges';
@@ -331,6 +332,7 @@ export function App() {
   const [showKeys, setShowKeys] = useState(false);
   const [showUpdates, setShowUpdates] = useState(false);
   const upd = useUpdates();
+  const pwa = useInstall();
   const [notice, setNotice] = useState('');
   const fileHandle = useRef<Handle | null>(null); // the file Save writes back to (Chrome and Edge)
   /** Set while an existing extrude is open in the dialog: `key` is the profiles it had, to tell whether they changed. */
@@ -1330,6 +1332,7 @@ export function App() {
       { label: 'Import STEP / IGES / STL…', onClick: doImport },
       { label: 'Preferences…', onClick: () => { setFileMenu(null); setShowPrefs(true); } },
       { label: upd.info?.newer && !upd.info.skipped ? `Updates… (${upd.info.latest?.version} is available)` : 'Updates…', onClick: () => { setShowUpdates(true); void upd.refresh(); } },
+      ...(pwa.canInstall ? [{ label: 'Install Forge as an app…', onClick: () => { setFileMenu(null); void pwa.install(); } }] : []),
       { label: 'Export bodies', heading: true, onClick: () => {} },
       { label: 'Choose bodies, one file each, or a slicer…', disabled: none, onClick: () => openExport(false) },
       { label: 'STEP (.step)', disabled: none, onClick: () => void doExport('step') },
@@ -1764,7 +1767,7 @@ export function App() {
           onNew={() => { setShowStartPage(false); doNew(); }} onOpen={() => doOpen()} onImport={() => { setShowStartPage(false); doImport(); }} onDemo={() => { setShowStartPage(false); void withWorking('Loading the demo bracket…', () => run(api.demo)); }}
           onRecent={openRecent} onForget={(r) => void removeRecent(r.id).then(setRecents)}
           onSave={() => { setShowStartPage(false); void doSave(false); }} onSaveAs={() => { setShowStartPage(false); void doSave(true); }}
-          onPrefs={() => { setShowStartPage(false); setShowPrefs(true); }} onKeys={() => { setShowStartPage(false); setShowKeys(true); }} onUpdates={() => { setShowStartPage(false); setShowUpdates(true); void upd.refresh(); }} />
+          onPrefs={() => { setShowStartPage(false); setShowPrefs(true); }} onKeys={() => { setShowStartPage(false); setShowKeys(true); }} onUpdates={() => { setShowStartPage(false); setShowUpdates(true); void upd.refresh(); }} onInstall={pwa.canInstall ? () => { void pwa.install(); } : undefined} />
       )}
       {planeMenu && <ContextMenu x={planeMenu.x} y={planeMenu.y} items={planeMenuItems(planeMenu.name)} onClose={() => setPlaneMenu(null)} />}
       {bodyMenu && <ContextMenu x={bodyMenu.x} y={bodyMenu.y} items={bodyMenuItems(bodyMenu.name)} onClose={() => setBodyMenu(null)} />}

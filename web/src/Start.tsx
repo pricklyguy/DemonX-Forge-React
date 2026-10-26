@@ -8,7 +8,7 @@ interface Props {
   overlay?: { docName: string; canSave: boolean };
   onNew(): void; onOpen(): void; onImport(): void; onDemo(): void;
   onRecent(r: RecentItem): void; onForget(r: RecentItem): void;
-  onClose?(): void; onSave?(): void; onSaveAs?(): void; onPrefs?(): void; onKeys?(): void; onUpdates?(): void;
+  onClose?(): void; onSave?(): void; onSaveAs?(): void; onPrefs?(): void; onKeys?(): void; onUpdates?(): void; onInstall?(): void;
 }
 
 function Card({ id, title, note, icon, onClick, disabled }: { id: string; title: string; note: string; icon: string; onClick(): void; disabled?: boolean }) {
@@ -57,6 +57,7 @@ export function Start(p: Props) {
         <button disabled={!p.overlay.canSave} onClick={p.onSave}>Save</button><button disabled={!p.overlay.canSave} onClick={p.onSaveAs}>Save As…</button>
         <hr />
         <button onClick={p.onPrefs}>Preferences</button><button onClick={p.onKeys}>Keyboard shortcuts</button><button onClick={p.onUpdates}>Updates</button>
+        {p.onInstall && <><hr /><button data-testid="install-app" onClick={p.onInstall}>Install Forge as an app</button></>}
       </nav>
       <div className="smain">{body}</div>
     </div>

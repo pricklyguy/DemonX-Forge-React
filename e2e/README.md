@@ -37,6 +37,7 @@ Each script says in its header how to run it. They need the real engine, a built
 | `planepick.mjs` | choosing a sketch plane: a face wins over the plane sheets, the preference that hides the sheets, the hover preview on the buttons (needs a fresh server) |
 | `snapref.mjs` | a sketch snaps to a body's edges in its plane (a corner off the grid), and the browser eye really shows a sketch the engine hid (needs a fresh server) |
 | `prefs.mjs` | File > Preferences: Show initial start options decides whether Forge opens on the Start page; origin planes and sketch axes choices are remembered (needs a fresh server) |
+| `pwa.mjs` | Installable app: manifest, icons, service worker, and the Install Forge as an app items in File and on the Start page (needs a fresh server) |
 | `snap.mjs` | the face under the pointer lights up when choosing a sketch plane; Extrude and Press Pull reach another face's height by clicking it (needs a fresh server) |
 | `strip.mjs` | a strip sketched along a face's edge (lines on top of the face outline): two shapes, clicking the strip, extruding it; orbiting past the top view (needs a fresh server) |
 | `usability.mjs` | E on a body face (Press Pull), the compact Move / Copy dialog (typing, step buttons, arrows, Copy, undo), the ribbon in a 1000 px window, the right-click Modify section, snap hints (end, middle, crossing, alignment) and the rubber band (needs a fresh server) |
