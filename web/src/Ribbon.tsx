@@ -183,7 +183,7 @@ export function Ribbon(p: Props) {
     T('fillet', <Icon.fillet />, 'Fillet', 'fillet', { pinned: true }),
     T('chamfer', <Icon.bChamfer />, 'Chamfer', 'chamfer'),
     T('break', <Icon.tBreak />, 'Break', 'break'),
-    { id: 'tool-smove', icon: <Icon.bMove />, label: 'Move / Copy', tooltip: 'Select curves first, then Move / Copy', onClick: p.onSketchMove },
+    { id: 'tool-smove', icon: <Icon.bMove />, label: 'Move / Copy', tooltip: 'Move / Copy (M): select curves first, then type a move or turn, or drag the arrows', onClick: p.onSketchMove },
     { id: 'tool-sscale', icon: <Icon.bScale />, label: 'Scale', tooltip: 'Select curves first, then Scale', onClick: p.onSketchScale },
   ];
   const sketchPattern: Cmd[] = [

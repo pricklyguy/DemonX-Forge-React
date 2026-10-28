@@ -15,7 +15,7 @@ import { Ribbon } from './Ribbon';
 import { Timeline } from './Timeline';
 import { ViewCube } from './ViewCube';
 import { Viewport, type FacePick } from './Viewport';
-import { normalOf, toWorld } from './sketch/plane';
+import { normalOf, toWorld, type Plane } from './sketch/plane';
 import { findRegions, pointInPolygon } from './sketch/regions';
 import { segmentsTouchBox } from './sketch/box';
 import { lineChain, offsetChain, sideDistance } from './sketch/offsetChain';
@@ -153,7 +153,7 @@ export const polyArea = (p: Vec2[]) => p.reduce((s, a, i) => { const b = p[(i + 
 const SHORTCUTS: [string, [string, string][]][] = [
   ['Anywhere', [['Ctrl+Z', 'Undo'], ['Ctrl+Y  or  Ctrl+Shift+Z', 'Redo'], ['Ctrl+S', 'Save'], ['Ctrl+Shift+S', 'Save As'], ['Ctrl+O', 'Open'], ['Esc', 'Cancel the dialog, tool or selection'], ['Enter', 'OK in a dialog'], ['?', 'This list']]],
   ['Solid', [['E', 'Extrude (click a shape first, or pick it in the dialog)'], ['F', 'Fillet'], ['Q', 'Press Pull'], ['H', 'Hole'], ['M', 'Move / Copy'], ['Delete', 'Delete the selected timeline step']]],
-  ['Sketch', [['L', 'Line'], ['R', 'Rectangle'], ['C', 'Circle'], ['A', 'Arc'], ['T', 'Trim'], ['O', 'Offset'], ['D', 'Sketch Dimension'], ['X', 'Toggle construction line'], ['Delete', 'Delete the selected curves'], ['Type a number', 'Set the size of the shape being drawn'], ['Tab', 'Next size box'], ['Enter', 'Place the shape']]],
+  ['Sketch', [['L', 'Line'], ['R', 'Rectangle'], ['C', 'Circle'], ['A', 'Arc'], ['T', 'Trim'], ['O', 'Offset'], ['M', 'Move / Copy the selected curves'], ['D', 'Sketch Dimension'], ['X', 'Toggle construction line'], ['Delete', 'Delete the selected curves'], ['Type a number', 'Set the size of the shape being drawn'], ['Tab', 'Next size box'], ['Enter', 'Place the shape']]],
   ['Mouse', [['Wheel', 'Zoom toward the pointer'], ['Middle drag', 'Pan'], ['Shift + middle drag', 'Orbit'], ['Right click', 'Actions menu for what is under the pointer'], ['Drag (drawing tool)', 'Draw corner to corner'], ['Double-click a timeline step', 'Edit it'], ['Drag the arrow', 'Set the distance (Press Pull, Extrude)']]],
 ];
 function ShortcutsDialog({ onClose }: { onClose(): void }) {
@@ -286,6 +286,8 @@ function BodyFields({ tool, bf, setBf, bodies, allBodies, target, onEnter }: { t
 export function App() {
   const [snap, setSnap] = useState<Snapshot>(EMPTY);
   const [mode, setMode] = useState<Mode>('model');
+  /** Sketch Move / Copy while its box is open: the curves, the middle they turn about, and the typed move (arrows in the view set dx and dy). */
+  const [skMove, setSkMove] = useState<{ ents: string[]; ctr: Vec2; dx: string; dy: string; angle: string; copy: boolean } | null>(null);
   const [tool, setTool] = useState<Tool | null>(null);
   const [pending, setPending] = useState<Vec2[]>([]);
   const [cursor, setCursor] = useState<Vec2 | null>(null);
@@ -474,12 +476,36 @@ export function App() {
   };
   const needSelection = () => { if (selected.length && selectionCentre()) return true; setError('Select the curves first (click one, Shift adds more, or drag a box round them), then choose this'); return false; };
   const sketchMove = () => {
-    if (!needSelection()) return; const ents = selected, ctr = selectionCentre()!; chooseTool(null); setSelected(ents);
-    setEdit({ title: 'Move: dx, dy [, turn in degrees]', value: '10, 0', options: ['Move', 'Copy'], option: 'Move', submit: (v, o) => {
-      const n = numsOf(v); if (n.length < 2 || n.some((q) => !Number.isFinite(q))) { setError('Type dx, dy (and, if you want, an angle)'); return; }
-      send([{ command: 'sketch.move', params: { entities: ents, translate: [n[0], n[1]], ...(n[2] ? { angle: n[2], center: ctr } : {}), copy: o === 'Copy' } }]);
-    } });
+    if (!needSelection()) return; const ctr = selectionCentre()!; chooseTool(null);
+    setSkMove({ ents: selected, ctr, dx: '0', dy: '0', angle: '0', copy: false });
   };
+  const okSketchMove = () => {
+    const m = skMove; if (!m) return;
+    const [dx, dy, a] = [m.dx, m.dy, m.angle].map((t) => (t.trim() === '' ? 0 : Number(t.replace(',', '.')))) as [number, number, number];
+    if (![dx, dy, a].every((q) => Number.isFinite(q))) { setError('Type numbers for the move and the turn'); return; }
+    if (dx === 0 && dy === 0 && a === 0) { setError('Drag an arrow or type a move or a turn (not all zero)'); return; }
+    setSkMove(null);
+    // a turn cannot keep Horizontal and Vertical: they would hold the lines where they are and the shape would collapse, so those on the chosen lines are let go first
+    const letGo = a % 180 !== 0 ? (activeSketch?.orientation ?? []).filter((o) => m.ents.includes(o.curve)).map((o) => o.id) : [];
+    send([...(letGo.length ? [{ command: 'sketch.delete', params: { entities: letGo } }] : []), { command: 'sketch.move', params: { entities: m.ents, translate: [dx, dy], ...(a ? { angle: a, center: m.ctr } : {}), copy: m.copy } }]);
+  };
+  const skMoveNums = (): [number, number, number] => { const n = (t?: string) => { const v = Number((t ?? '').replace(',', '.')); return Number.isFinite(v) ? v : 0; }; return [n(skMove?.dx), n(skMove?.dy), n(skMove?.angle)]; };
+  /** What the move would make, drawn while the box is open: turned about the middle of the selection, then moved. */
+  const skMoveOutline = useMemo((): Vec2[][] => {
+    if (!skMove || !activeSketch) return [];
+    const [dx, dy, a] = skMoveNums(), r = (a * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r), [cx, cy] = skMove.ctr;
+    return activeSketch.curves.filter((c) => skMove.ents.includes(c.id)).map((c) => curvePoints(c).map(([x, y]): Vec2 => [cx + (x - cx) * co - (y - cy) * si + dx, cy + (x - cx) * si + (y - cy) * co + dy]));
+  }, [skMove, activeSketch]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Two arrows from the middle of the selection along the sketch's X and Y: dragging one sets dx or dy. */
+  const skMoveHandles = useMemo(() => {
+    if (!skMove || !activeSketch?.plane) return undefined;
+    const pl = activeSketch.plane as Plane, [dx, dy] = skMoveNums(), at = toWorld(pl, [skMove.ctr[0] + dx, skMove.ctr[1] + dy]);
+    const pts = activeSketch.curves.filter((c) => skMove.ents.includes(c.id)).flatMap((c) => curvePoints(c)), span = Math.max(1, ...pts.map((q) => Math.hypot(q[0] - skMove.ctr[0], q[1] - skMove.ctr[1])));
+    return (['dx', 'dy'] as const).map((key, k) => ({
+      origin: at, dir: (k === 0 ? pl.xDir : pl.yDir) as Vec3, base: 0, fixed: span * 0.6 + 8, value: k === 0 ? dx : dy, color: AXIS_COLOR[k === 0 ? 'mx' : 'my'], label: `Move ${k === 0 ? 'X' : 'Y'} arrow`,
+      onChange: (x: number) => setSkMove((m) => (m ? { ...m, [key]: String(+x.toFixed(2)) } : m)), onSubmit: okSketchMove,
+    }));
+  }, [skMove, activeSketch]); // eslint-disable-line react-hooks/exhaustive-deps
   const sketchScale = () => {
     if (!needSelection()) return; const ents = selected, ctr = selectionCentre()!; chooseTool(null); setSelected(ents);
     setEdit({ title: 'Scale the selection about its middle: factor', value: '2', submit: (v) => { const f = Number(v); if (!(f > 0)) { setError('The factor must be above 0'); return; } send([{ command: 'sketch.scale', params: { entities: ents, base: ctr, factor: f } }]); } });
@@ -1035,6 +1061,7 @@ export function App() {
     chooseTool(null); setSel(null); setEdgesSel([]); setProfiles([]); setMeasure([]); setError('');
   };
   useEffect(() => { if (mode !== 'model') setMeasure(null); }, [mode]);
+  useEffect(() => { if (mode !== 'sketch') setSkMove(null); }, [mode]);
   useEffect(() => {
     if (!measure) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMeasure(null); };
@@ -1437,8 +1464,8 @@ export function App() {
 
   // ---- keyboard (the same letters Fusion users know)
   const showKeysRef = useRef(false); showKeysRef.current = showKeys;
-  const latest = useRef({ showStartPage, textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline });
-  latest.current = { showStartPage, textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline };
+  const latest = useRef({ skMove, showStartPage, textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline });
+  latest.current = { skMove, showStartPage, textDlg, showPrefs, bodySel, exportDlg, offsetPick, mode, tool, pending, edit, sel, activeSketch, selected, picks, selTl, menu, confirm, items: snap.timeline };
   // Another program (an AI client connected through MCP) can change the design while the page is open: notice it, when nothing here is half done
   const watch = useRef({ mode, busy, stamp: snap.stamp, dialogs: false });
   watch.current = { mode, busy, stamp: snap.stamp, dialogs: !!(placeImport || confirm || showUpdates || showKeys || section || edit) };
@@ -1456,8 +1483,8 @@ export function App() {
     }, 2000);
     return () => clearInterval(t);
   }, [run]);
-  const actions = useRef({ undo, redo, startExtrude, cancelExtrude, okExtrude, chooseTool, endChain, createSketch, deleteSelected, toggleConstruction, requestDelete, editItem, doSave, doOpen, startModify, startMeasure, cancelModify, okModify });
-  actions.current = { undo, redo, startExtrude, cancelExtrude, okExtrude, chooseTool, endChain, createSketch, deleteSelected, toggleConstruction, requestDelete, editItem, doSave, doOpen, startModify, startMeasure, cancelModify, okModify };
+  const actions = useRef({ sketchMove, undo, redo, startExtrude, cancelExtrude, okExtrude, chooseTool, endChain, createSketch, deleteSelected, toggleConstruction, requestDelete, editItem, doSave, doOpen, startModify, startMeasure, cancelModify, okModify });
+  actions.current = { sketchMove, undo, redo, startExtrude, cancelExtrude, okExtrude, chooseTool, endChain, createSketch, deleteSelected, toggleConstruction, requestDelete, editItem, doSave, doOpen, startModify, startMeasure, cancelModify, okModify };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const L = latest.current, A = actions.current, k = e.key.toLowerCase();
@@ -1479,6 +1506,7 @@ export function App() {
         else if (L.showPrefs) setShowPrefs(false);
         else if (L.textDlg) closeText(false);
         else if (L.menu) setMenu(null);
+        else if (L.skMove) setSkMove(null);
         else if (L.edit) setEdit(null);
         else if (L.mode === 'extrude') void A.cancelExtrude();
         else if (L.mode === 'modify') void A.cancelModify();
@@ -1507,6 +1535,7 @@ export function App() {
         if (k === 'enter' && L.tool === 'spline' && L.pending.length) { A.endChain(); return; }
         if (k === 'delete' || k === 'backspace') { A.deleteSelected(); return; }
         if (k === 'x') { A.toggleConstruction(); return; }
+        if (k === 'm') { e.preventDefault(); A.sketchMove(); return; } // (prevented: the box takes the focus, and the letter must not be typed into it)
         if (k === 'e') void A.startExtrude();
         return;
       }
@@ -1565,7 +1594,7 @@ export function App() {
         <Viewport bodies={snap.bodies} sketches={snap.sketches} activeSketch={activeSketch} theme={theme} mode={mode} tool={tool} pending={pending}
           hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} constPlanes={snap.planes} hiddenPlanes={hiddenPlanes} planeSheets={planeSheets} hoverPlane={hoverPlane} showGrid={showGrid} showAxes={showAxes} showDims={showDims} onDimEdit={dimEdited} showEdges={showEdges} showProfiles={showProfiles} snap={snapOn}
           selectedFaces={mode === 'modify' ? facesSel : measure ? measure.flatMap((m) => (m.kind === 'face' ? [{ body: m.body, face: m.face }] : [])) : sel ? [sel] : []} pickFaces={mode === 'modify' && (FACE_TOOLS.includes(modTool) || BODY_TOOLS.includes(modTool) || PRIM_TOOLS.includes(modTool) || PLANE_TOOLS.includes(modTool))} selectedBodies={mode === 'modify' ? bodiesSel : mode === 'model' ? bodySel : []} onBodyPick={selectBody} selectedProfiles={profiles}
-          handle={dragHandle} handles={moveHandles} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setSel(f); setProfiles([]); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
+          handle={dragHandle} handles={skMoveHandles ?? moveHandles} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setSel(f); setProfiles([]); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={skMove ? skMoveOutline : offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
           pickMode={mode !== 'sketch' ? null : !tool ? 'curve' : isDraw(tool) ? null : PICK_MODE[tool]} highlight={[...selected, ...picks.map((q) => q.id), ...(offsetPick ? [offsetPick] : [])]} showPoints={mode === 'sketch' && !!tool && !isDraw(tool) && PICK_MODE[tool] !== 'curve'}
           onProfilePick={profilePicked} onFaceSnap={faceSnap} onCursor={setCursor} apiRef={viewApi} />
 
@@ -1726,6 +1755,17 @@ export function App() {
               {measureRows.map((r) => <div className="drow" key={r.label}><span>{r.label}</span><span data-testid="measure-value">{r.value}</span></div>)}
             </div>}
             <div className="dbtns"><button onClick={() => setMeasure([])}>Clear</button><button className="primary" data-testid="measure-close" onClick={() => setMeasure(null)}>Close</button></div>
+          </div>
+        )}
+        {skMove && (
+          <div className="entry skmove" data-testid="skmove-dialog">
+            <b>Move / Copy</b>
+            {([['dx', 'X', 'mm'], ['dy', 'Y', 'mm'], ['angle', 'Turn', '°']] as const).map(([key, lab, unit], i) => (
+              <label key={key}>{lab}<input autoFocus={i === 0} aria-label={`Move ${key}`} data-testid={`skmove-${key}`} type="text" value={skMove[key]} onFocus={(e) => e.target.select()}
+                onChange={(e) => setSkMove({ ...skMove, [key]: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') okSketchMove(); }} />{unit}</label>
+            ))}
+            <label><input type="checkbox" data-testid="skmove-copy" checked={skMove.copy} onChange={(e) => setSkMove({ ...skMove, copy: e.target.checked })} />Copy</label>
+            <button onClick={() => setSkMove(null)}>Cancel</button><button className="primary" data-testid="skmove-ok" onClick={okSketchMove}>OK</button>
           </div>
         )}
         {edit && (

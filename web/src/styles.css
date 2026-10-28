@@ -204,3 +204,5 @@ header button.docname:hover:not(:disabled), header button.docname:focus-visible 
 .veilbox small { color: var(--muted); font-size: 12px; }
 .spinner { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } } @keyframes veilin { to { opacity: 1; } }
+.entry.skmove { gap: 10px; }
+.entry.skmove input[type=text] { width: 64px; }

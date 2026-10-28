@@ -449,12 +449,13 @@ export function toSketch(k: any, activeId: unknown): Sketch {
       ...(kind === 'point_line_distance' && ends.length === 1 && typeof c.l === 'number' && curves[c.l] ? { points: ends, line: curves[c.l].id } : {}),
     };
   });
+  const orientation = (k.constraints ?? []).filter((c: any) => (c.type === 'horizontal' || c.type === 'vertical') && typeof c.l === 'number' && curves[c.l]).map((c: any) => ({ id: String(c.id), kind: c.type as 'horizontal' | 'vertical', curve: curves[c.l].id }));
   const profiles = (k.profiles ?? []).map((p: any) => ({
     index: Number(p.index), area: Number(p.area_mm2 ?? 0), centroid: v2(p.centroid_sketch), curves: (p.curves ?? []).map(String), holes: (p.holes ?? []).map((h: any) => (h ?? []).map(String)),
   }));
   return {
     id: Number(k.id), name: String(k.name), visible: k.visible !== false, active: activeId != null && Number(activeId) === Number(k.id),
     plane: { origin: v3(k.plane?.origin), xDir: v3(k.plane?.x_dir), yDir: v3(k.plane?.y_dir) },
-    curves, points, dimensions, profiles, dof: Number(k.dof ?? 0),
+    curves, points, dimensions, orientation, profiles, dof: Number(k.dof ?? 0),
   };
 }

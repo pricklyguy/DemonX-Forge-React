@@ -46,7 +46,7 @@ await click([90, 10]); // no tool: select it
 await pick(p, 'tool-sscale'); await answer('2');
 check(await until(async () => (await sketch()).curves.some((c) => c.type === 'circle' && Math.abs(c.radius - 20) < 1e-6)), 'Scale makes it twice as big (radius 20)', JSON.stringify((await sketch()).curves.filter((c) => c.type === 'circle').map((c) => c.radius)));
 await click([100, 10]); // its edge is now 20 from the centre (80,10): (100,10)
-await pick(p, 'tool-smove'); await answer('0, 60', 'Copy');
+await pick(p, 'tool-smove'); await p.getByTestId('skmove-dy').fill('60'); await p.getByTestId('skmove-copy').check(); await p.getByTestId('skmove-ok').click();
 check(await until(async () => (await count('circle')) === 2), 'Move / Copy with Copy makes a second circle', String(await count('circle')));
 
 // a vertical line to mirror about, then Mirror the original circle

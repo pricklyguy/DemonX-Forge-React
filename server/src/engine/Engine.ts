@@ -62,6 +62,8 @@ export interface Sketch {
   curves: SketchCurve[];
   points: SketchPoint[];
   dimensions: SketchDimension[];
+  /** The Horizontal and Vertical constraints on lines (a turn must let go of these, or the shape collapses). */
+  orientation?: { id: string; kind: 'horizontal' | 'vertical'; curve: string }[];
   profiles: Profile[];
   /** Degrees of freedom left (0 means fully constrained). */
   dof: number;

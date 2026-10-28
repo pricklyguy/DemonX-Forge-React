@@ -126,6 +126,8 @@ Not there yet: DXF of a section with a hatch, STEP import of assemblies tested (
 
 **0.36.0 (2026-10-26):** installable web app (`web/public/manifest.webmanifest`, `web/public/sw.js` that caches nothing, `web/src/install.ts` with `useInstall`, install items in the File menu and on the Start page). The server serves the manifest with its own type and the worker with `no-cache`. `e2e/pwa.mjs`.
 
+**0.37.0 (2026-10-28):** sketch Move / Copy box on M (`skMove` in App: typed X, Y, Turn, Copy; preview via `extraPreview`; X and Y arrows are the existing `handles`). A turn first deletes the Horizontal / Vertical constraints on the chosen lines (`Sketch.orientation`, from the engine's constraint list) because they collapse the shape. Next idea: a real 3D move triad (arrows, a plane square, rotation discs, as in the owner's picture from the Rust app); the Rust code is not in this repo (only patches that call `crate::browser::occurrence_triad`), so the owner's local branch would have to be pushed or pasted to compare.
+
 ## Not done on purpose
 
 Assemblies, sheet metal, CAM, rendering, simulation. PCB work is deferred.
