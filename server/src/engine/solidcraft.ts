@@ -385,7 +385,7 @@ export class SolidCraftEngine implements Engine {
       if (t.type !== 'ConstructionPlane') continue;
       let r: { kind: ConstructionPlane['kind']; frame: PlaneFrame | null } = { kind: 'other', frame: null };
       try { r = planeFromDefinition((await this.tool('execute', { command: 'timeline.inspect', params: { feature: t.name } }))?.definition, known); } catch { /* a plane the engine cannot describe is still listed */ }
-      if (r.frame && !t.suppressed) known.set(t.name, r.frame);
+      if (r.frame && !t.suppressed) { known.set(t.name, r.frame); known.set(`#${t.id}`, r.frame); }
       out.push({ name: t.name, kind: r.kind, suppressed: t.suppressed, frame: r.frame });
     }
     return out;

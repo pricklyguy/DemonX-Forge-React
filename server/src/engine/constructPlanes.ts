@@ -34,7 +34,8 @@ function rotate(v: Vec3, axis: Vec3, deg: number): Vec3 {
 function refFrame(ref: any, known: Map<string, PlaneFrame>): PlaneFrame | null {
   if (!ref || typeof ref !== 'object') return null;
   if (ref.type === 'origin') return ORIGIN_FRAMES[String(ref.name)] ?? null;
-  if (ref.type === 'construction') return known.get(String(ref.name)) ?? null;
+  // an earlier plane is named by its name (SolidCraft up to 0.19) or by its feature number (0.29), which the caller keeps in `known` as `#<number>`
+  if (ref.type === 'construction') return known.get(ref.name !== undefined ? String(ref.name) : `#${ref.feature}`) ?? null;
   if (ref.type === 'plane') return refFrame(ref.plane, known);
   if (ref.type === 'face' && ref.plane) { const o = vec(ref.plane.origin), x = vec(ref.plane.x_dir), y = vec(ref.plane.y_dir); return o && x && y ? { origin: o, xDir: x, yDir: y } : null; }
   return null;
