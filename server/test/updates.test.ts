@@ -115,7 +115,7 @@ describe('what GitHub answers', () => {
     expect(parseReleases([{ tag_name: 'v1.0.0', body: 'y'.repeat(100_000) }])![0]!.notes.length).toBeLessThan(6100);
   });
   it('builds the release page from the tag, on GitHub', () => {
-    expect(releasePageUrl('v2.0.0-test.4')).toBe('https://github.com/pricklyguy/DemonX-Forge/releases/tag/v2.0.0-test.4');
+    expect(releasePageUrl('v2.0.0-test.4')).toBe('https://github.com/pricklyguy/DemonX-Forge-React/releases/tag/v2.0.0-test.4');
   });
 });
 
@@ -133,10 +133,10 @@ describe('UpdateChecker', () => {
     u.on('update', (v) => seen.push(v.checking));
     await u.check();
     const v = u.view();
-    expect(asked).toContain('api.github.com/repos/pricklyguy/DemonX-Forge/releases');
+    expect(asked).toContain('api.github.com/repos/pricklyguy/DemonX-Forge-React/releases');
     expect(v).toMatchObject({ current: '2.0.0-test.3', enabled: true, checking: false, error: '', newer: true, skipped: false, install: 'windows' });
     expect(v.latest?.version).toBe('2.0.0-test.4');
-    expect(v.url).toBe('https://github.com/pricklyguy/DemonX-Forge/releases/tag/v2.0.0-test.4');
+    expect(v.url).toBe('https://github.com/pricklyguy/DemonX-Forge-React/releases/tag/v2.0.0-test.4');
     expect(v.checkedAt).toBeGreaterThan(0);
     expect(seen).toEqual([true, false]);
   });

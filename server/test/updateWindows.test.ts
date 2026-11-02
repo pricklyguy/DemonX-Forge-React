@@ -271,8 +271,8 @@ describe('the updater and the launcher agree (the real launcher reads what the u
 });
 
 describe('helpers', () => {
-  it('only trusts the DemonX-Forge release downloads on GitHub, over https', () => {
-    for (const ok of ['https://github.com/pricklyguy/DemonX-Forge/releases/download/v1.0.0/x.zip', 'https://objects.githubusercontent.com/a', 'https://release-assets.githubusercontent.com/a']) expect(trustedDownload(new URL(ok)), ok).toBe(true);
+  it('only trusts the DemonX-Forge-React release downloads on GitHub, over https', () => {
+    for (const ok of ['https://github.com/pricklyguy/DemonX-Forge-React/releases/download/v1.0.0/x.zip', 'https://objects.githubusercontent.com/a', 'https://release-assets.githubusercontent.com/a']) expect(trustedDownload(new URL(ok)), ok).toBe(true);
     for (const bad of ['http://github.com/x', 'https://evil.example/github.com', 'https://github.com.evil.example/x', 'https://notgithubusercontent.com/x', 'file:///etc/passwd', 'ftp://github.com/x']) expect(trustedDownload(new URL(bad)), bad).toBe(false);
   });
 

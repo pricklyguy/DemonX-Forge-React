@@ -9,9 +9,9 @@ import { emptyApplyView, emptyUpdateInfo, parseReleases, pickUpdate, type Update
 // Everything in the answer is untrusted text (see model.ts). A failed check is quiet: it is kept as a short
 // reason shown in the Updates window, never written to the console.
 
-export const RELEASES_URL = 'https://api.github.com/repos/pricklyguy/DemonX-Forge/releases?per_page=30';
+export const RELEASES_URL = 'https://api.github.com/repos/pricklyguy/DemonX-Forge-React/releases?per_page=30';
 /** The release page for a tag; built here from a validated tag, never taken from the answer */
-export const releasePageUrl = (tag: string) => `https://github.com/pricklyguy/DemonX-Forge/releases/tag/${encodeURIComponent(tag)}`;
+export const releasePageUrl = (tag: string) => `https://github.com/pricklyguy/DemonX-Forge-React/releases/tag/${encodeURIComponent(tag)}`;
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 const MAX_BODY = 2_000_000;

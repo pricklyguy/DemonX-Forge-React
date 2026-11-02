@@ -24,10 +24,10 @@ const TAG = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const MINUTE = 60_000;
 export const RESTART_CODE = 75;
-export const RELEASE_DOWNLOADS = 'https://github.com/pricklyguy/DemonX-Forge/releases/download';
+export const RELEASE_DOWNLOADS = 'https://github.com/pricklyguy/DemonX-Forge-React/releases/download';
 export const zipName = (version: string) => `DemonX-Forge-${version}-windows-x64.zip`;
 
-/** Only the DemonX-Forge repository's releases on GitHub (and the hosts GitHub hands release files to), over https */
+/** Only the DemonX-Forge-React repository's releases on GitHub (and the hosts GitHub hands release files to), over https */
 export function trustedDownload(u: URL): boolean {
   return u.protocol === 'https:' && (u.hostname === 'github.com' || u.hostname.endsWith('.githubusercontent.com'));
 }
