@@ -3,9 +3,14 @@ on:
   pull_request:
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '*.md']   # a documentation-only push needs no checks
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
