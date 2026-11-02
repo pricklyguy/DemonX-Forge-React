@@ -1,4 +1,5 @@
 import { useInstall } from './install';
+import type { TriadSpec } from './triad';
 import { chainOrder } from './chain';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildEdgeGeometry } from '../../server/src/engine/meshEdges';
@@ -341,6 +342,8 @@ export function App() {
   const [editing, setEditing] = useState<{ name: string; key: string } | null>(null);
   const [picks, setPicks] = useState<Picked[]>([]);
   const [sel, setSel] = useState<FacePick | null>(null);
+  /** The face picked before `sel` when a second one is added with Shift or Ctrl, so the info bar can measure the pair. */
+  const [selMore, setSelMore] = useState<FacePick | null>(null);
   const [profiles, setProfiles] = useState<ProfileRef[]>([]);
   const [ext, setExt] = useState<ExtrudeForm>({ distance: '0', direction: 'one', operation: 'new', axis: 'axis:y', angle: '360', path: '', thickness: '3', depth: '8', flip: false, ribSketch: '', pipeSketch: '', pipeDia: '6', pipeWall: '', embossMode: 'emboss' });
   const [extKind, setExtKind] = useState<ExtKind>('extrude'); // Revolve, Sweep and Loft share the Extrude dialog: profiles first, then what each needs
@@ -403,7 +406,7 @@ export function App() {
     else if (!activeSketch && mode === 'sketch') { setTextDlg(null); setMode('model'); setTool(null); setPending([]); setEdit(null); clearTyped(); setSelected([]); setPicks([]); }
   }, [activeSketch, mode]);
   useEffect(() => { setSelTl((id) => (id !== null && snap.timeline.some((t) => t.id === id) ? id : null)); }, [snap]);
-  useEffect(() => { setSel((p) => (p && snap.bodies.find((b) => b.name === p.body)?.faces.some((f) => f.index === p.face) ? p : null)); }, [snap]);
+  useEffect(() => { const keep = (p: FacePick | null) => (p && snap.bodies.find((b) => b.name === p.body)?.faces.some((f) => f.index === p.face) ? p : null); setSel(keep); setSelMore(keep); }, [snap]);
 
   // ---- sketching
   const chooseTool = (t: Tool | null) => { setOffsetPick(null); setTool(t); setPending([]); clearTyped(); setEdit(null); setPicks([]); if (t && t !== 'smirror' && t !== 'scirc') setSelected([]); setError(''); };
@@ -496,15 +499,18 @@ export function App() {
     const [dx, dy, a] = skMoveNums(), r = (a * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r), [cx, cy] = skMove.ctr;
     return activeSketch.curves.filter((c) => skMove.ents.includes(c.id)).map((c) => curvePoints(c).map(([x, y]): Vec2 => [cx + (x - cx) * co - (y - cy) * si + dx, cy + (x - cx) * si + (y - cy) * co + dy]));
   }, [skMove, activeSketch]); // eslint-disable-line react-hooks/exhaustive-deps
-  /** Two arrows from the middle of the selection along the sketch's X and Y: dragging one sets dx or dy. */
-  const skMoveHandles = useMemo(() => {
-    if (!skMove || !activeSketch?.plane) return undefined;
-    const pl = activeSketch.plane as Plane, [dx, dy] = skMoveNums(), at = toWorld(pl, [skMove.ctr[0] + dx, skMove.ctr[1] + dy]);
-    const pts = activeSketch.curves.filter((c) => skMove.ents.includes(c.id)).flatMap((c) => curvePoints(c)), span = Math.max(1, ...pts.map((q) => Math.hypot(q[0] - skMove.ctr[0], q[1] - skMove.ctr[1])));
-    return (['dx', 'dy'] as const).map((key, k) => ({
-      origin: at, dir: (k === 0 ? pl.xDir : pl.yDir) as Vec3, base: 0, fixed: span * 0.6 + 8, value: k === 0 ? dx : dy, color: AXIS_COLOR[k === 0 ? 'mx' : 'my'], label: `Move ${k === 0 ? 'X' : 'Y'} arrow`,
-      onChange: (x: number) => setSkMove((m) => (m ? { ...m, [key]: String(+x.toFixed(2)) } : m)), onSubmit: okSketchMove,
-    }));
+  /** The move / turn gizmo on the selection: arrows along the sketch's X and Y, the square between them and the centre dot move it, the ring turns it. The numbers in the box follow. */
+  const triadStart = useRef<number[]>([0, 0, 0]);
+  const skMoveTriad = useMemo((): TriadSpec | null => {
+    if (!skMove || !activeSketch?.plane) return null;
+    const pl = activeSketch.plane as Plane, [dx, dy] = skMoveNums();
+    return {
+      origin: toWorld(pl, [skMove.ctr[0] + dx, skMove.ctr[1] + dy]),
+      axes: [{ dir: pl.xDir, color: AXIS_COLOR.mx, label: 'X' }, { dir: pl.yDir, color: AXIS_COLOR.my, label: 'Y' }],
+      rings: [{ dir: normalOf(pl), color: AXIS_COLOR.mz, label: 'Z' }],
+      onMove: (d, phase) => { if (phase === 'start') { triadStart.current = skMoveNums(); return; } if (phase === 'move') setSkMove((m) => (m ? { ...m, dx: String(+(triadStart.current[0]! + d[0]!).toFixed(3)), dy: String(+(triadStart.current[1]! + d[1]!).toFixed(3)) } : m)); },
+      onTurn: (_r, deg, phase) => { if (phase === 'start') { triadStart.current = skMoveNums(); return; } if (phase === 'move') setSkMove((m) => (m ? { ...m, angle: String(+(triadStart.current[2]! + deg).toFixed(3)) } : m)); },
+    };
   }, [skMove, activeSketch]); // eslint-disable-line react-hooks/exhaustive-deps
   const sketchScale = () => {
     if (!needSelection()) return; const ents = selected, ctr = selectionCentre()!; chooseTool(null); setSelected(ents);
@@ -725,7 +731,8 @@ export function App() {
     return { origin: u.map((v) => +(v * d).toFixed(6)), x_dir: x.map((v) => +v.toFixed(6)), y_dir: y.map((v) => +v.toFixed(6)) };
   };
   const planePicked = (p: PlanePick) => {
-    const params = 'plane' in p ? { plane: p.plane } : { plane: { face: p.face.map((v) => +v.toFixed(3)), body: p.body, index: p.index } };
+    // XZ is the Front plane: asked for flipped, the engine gives x right, y up (world Z) and the normal toward the viewer; its own XZ has y pointing down and is seen from behind
+    const params = 'plane' in p ? { plane: p.plane, ...(p.plane === 'XZ' ? { flip: true } : {}) } : { plane: { face: p.face.map((v) => +v.toFixed(3)), body: p.body, index: p.index } };
     setMode('model'); // the engine's reply (an open sketch) moves us into the sketch
     void run(async () => {
       try { return await api.batch([{ command: 'sketch.create', params }]); } catch (e) {
@@ -783,20 +790,22 @@ export function App() {
     }
     return null;
   }, [mode, modTool, facesSel, edgesSel, edgeSets, valueEdit, modBase, modValue, extKind, profiles, snap.sketches, ext.distance, ext.direction, ext.operation, editing, bodyCenter]);
-  /** Move: one arrow per axis on the chosen bodies, starting at the body's surface (dragging changes the move distance). */
-  const moveHandles = useMemo(() => {
-    if (mode !== 'modify' || modTool !== 'move' || valueEdit || !bodiesSel.length) return undefined;
+  /** Move: the gizmo on the chosen bodies, at their middle plus the move so far (arrows and squares move them, the rings turn them about a world axis). */
+  const moveTriad = useMemo((): TriadSpec | null => {
+    if (mode !== 'modify' || modTool !== 'move' || valueEdit || !bodiesSel.length) return null;
     const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     for (const b of modBase?.bodies ?? []) if (bodiesSel.includes(b.name)) for (let i = 0; i < b.positions.length; i++) { const k = i % 3; lo[k] = Math.min(lo[k]!, b.positions[i]!); hi[k] = Math.max(hi[k]!, b.positions[i]!); }
-    if (!Number.isFinite(lo[0]!)) return undefined;
-    const c = lo.map((l, k) => (l + hi[k]!) / 2) as Vec3;
-    const reach = Math.max(hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!) * 0.35 + 10; // the arrows keep this length and travel with the body
-    const shift = [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0];
-    return (['mx', 'my', 'mz'] as const).map((key, k) => {
-      const dir: Vec3 = [k === 0 ? 1 : 0, k === 1 ? 1 : 0, k === 2 ? 1 : 0];
-      return { origin: [c[0] + shift[0]!, c[1] + shift[1]!, c[2] + shift[2]!] as Vec3, dir, base: (hi[k]! - lo[k]!) / 2 + 6, fixed: reach, value: Number(bf[key]) || 0, color: AXIS_COLOR[key], label: `Move ${key[1]!.toUpperCase()} arrow`, onChange: (x: number) => setBf((f) => ({ ...f, [key]: String(+x.toFixed(2)) })), onSubmit: () => void okModify() };
-    });
-  }, [mode, modTool, valueEdit, bodiesSel, modBase, bf.mx, bf.my, bf.mz]);
+    if (!Number.isFinite(lo[0]!)) return null;
+    const c = lo.map((l, k) => (l + hi[k]!) / 2), shift = [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0];
+    const keys = ['mx', 'my', 'mz'] as const, names = ['X', 'Y', 'Z'] as const;
+    return {
+      origin: [c[0]! + shift[0]!, c[1]! + shift[1]!, c[2]! + shift[2]!],
+      axes: names.map((n, k) => ({ dir: AXIS_VEC[n]!, color: AXIS_COLOR[keys[k]!], label: n })),
+      rings: names.map((n, k) => ({ dir: AXIS_VEC[n]!, color: AXIS_COLOR[keys[k]!], label: n })),
+      onMove: (d, phase) => { if (phase === 'start') { triadStart.current = [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0]; return; } if (phase === 'move') setBf((f) => ({ ...f, mx: String(+(triadStart.current[0]! + d[0]!).toFixed(3)), my: String(+(triadStart.current[1]! + d[1]!).toFixed(3)), mz: String(+(triadStart.current[2]! + d[2]!).toFixed(3)) })); },
+      onTurn: (r, deg, phase) => { if (phase === 'move') setBf((f) => ({ ...f, rotAxis: names[r]!, rotAngle: String(deg) })); },
+    };
+  }, [mode, modTool, valueEdit, bodiesSel, modBase, bf.mx, bf.my, bf.mz]); // eslint-disable-line react-hooks/exhaustive-deps
   const preview = useRef(false);
   const extrudeStep = (): { command: string; params: Record<string, unknown> } | null => {
     const first = profiles[0]; const d = ext.distance.trim();
@@ -1086,7 +1095,7 @@ export function App() {
   const edgePicked = (ref: EdgeRef | null, additive = false) => {
     if (!ref) return;
     if (mode === 'model') { // edges first, then Fillet or Chamfer (as in Fusion): a click picks one edge, Shift or Ctrl adds more
-      setSel(null); setProfiles([]);
+      if (!additive) { setSel(null); setSelMore(null); } setProfiles([]);
       setEdgesSel((cur) => (cur.some((e) => e.body === ref.body && e.index === ref.index) ? cur.filter((e) => !(e.body === ref.body && e.index === ref.index)) : additive ? [...cur.filter((e) => e.body === ref.body), ref] : [ref]));
       return;
     }
@@ -1562,6 +1571,29 @@ export function App() {
   const hint = mode === 'sketch'
     ? (tool ? (TOOL_HINT[tool]?.[Math.min(isDraw(tool) ? pending.length : picks.length, (TOOL_HINT[tool]?.length ?? 1) - 1)] ?? '') : selected.length ? `${selected.length} selected. Delete removes it, X makes it a construction line, Esc clears.` : 'Pick a sketch tool, or click a line to select it. Keys: L R C A T O D.')
     : HINT[mode === 'modify' && modTool !== 'fillet' && modTool !== 'chamfer' ? modTool : mode] ?? '';
+  /** The bottom bar's measurement of what is selected: a face (area), an edge (length, diameter), a curve in a sketch, or the distance and angle between two picks (Shift or Ctrl adds the second). */
+  const selInfo = useMemo((): string => {
+    if (mode === 'sketch') {
+      const cs = (activeSketch?.curves ?? []).filter((c) => selected.includes(c.id));
+      if (cs.length !== 1) return cs.length ? `${cs.length} selected` : '';
+      const c = cs[0]!, r = (v: number) => `${Math.round(v * 1000) / 1000}`;
+      if (c.type === 'line' && c.start && c.end) return `Line · length ${r(Math.hypot(c.end[0] - c.start[0], c.end[1] - c.start[1]))} mm · angle ${r((Math.atan2(c.end[1] - c.start[1], c.end[0] - c.start[0]) * 180) / Math.PI)}°`;
+      if (c.type === 'circle' && c.radius !== undefined) return `Circle · diameter ${r(2 * c.radius)} mm · radius ${r(c.radius)} mm`;
+      if (c.type === 'arc' && c.radius !== undefined) return `Arc · radius ${r(c.radius)} mm`;
+      return '';
+    }
+    if (mode !== 'model' || measure) return '';
+    const faceItem = (p: FacePick): MeasureItem | null => { const f = snap.bodies.find((b) => b.name === p.body)?.faces.find((q) => q.index === p.face); return f ? { kind: 'face', body: p.body, face: p.face, area: f.area, at: p.point, normal: f.planeNormal, cylinder: f.cylinder } : null; };
+    const edgeItem = (e: EdgeRef): MeasureItem | null => { const g = edgeSets.find((x) => x.body === e.body)?.edges.find((x) => x.index === e.index); return g ? { kind: 'edge', body: e.body, index: e.index, segments: g.segments } : null; };
+    const items = [...(selMore ? [faceItem(selMore)] : []), ...(sel ? [faceItem(sel)] : []), ...edgesSel.map(edgeItem)].filter((x): x is MeasureItem => !!x);
+    if (items.length === 1) {
+      const it = items[0]!;
+      if (it.kind === 'face') { const f = snap.bodies.find((b) => b.name === it.body)?.faces.find((q) => q.index === it.face)!; return `Face ${it.face} · ${f.planeNormal ? 'plane' : f.cylinder ? `cylinder R${f.cylinder.radius.toFixed(2)}` : 'other'} · area ≈ ${f.area.toFixed(1)} mm²`; }
+      return `${describeItem(it)} · ${measureOne(it).map((x) => `${x.label} ${x.value}`).join(' · ')}`;
+    }
+    if (items.length === 2) return `${items.map((x) => (x.kind === 'face' ? `Face ${x.face} of ${x.body}` : x.kind === 'edge' ? `Edge ${x.index} of ${x.body}` : 'Point')).join(' and ')} · ${measureTwo(items[0]!, items[1]!).map((x) => `${x.label} ${x.value}`).join(' · ')}`;
+    return items.length > 2 ? `${items.length} selected (pick two to measure between them)` : '';
+  }, [mode, measure, sel, selMore, edgesSel, edgeSets, snap, activeSketch, selected]);
   const triangles = snap.bodies.reduce((n, b) => n + b.faceIds.length, 0);
   const placeholder = tool === 'rect' || tool === 'rectCenter' ? 'width, height' : tool === 'rectRound' ? 'width, height, radius' : tool === 'polyIn' || tool === 'polyOut' ? 'radius [, angle]' : tool === 'circle' || tool === 'circle2' ? 'diameter' : tool === 'slot' ? 'width' : 'length [, angle]';
   const fieldNames = tool === 'rect' || tool === 'rectCenter' ? ['Width', 'Height'] : tool === 'circle' || tool === 'circle2' ? ['Diameter'] : tool === 'slot' ? ['Width'] : ['Length', 'Angle'];
@@ -1593,8 +1625,8 @@ export function App() {
       <div className={`stage${mode === 'sketch' && tool === 'text' ? ' cur-text' : mode === 'sketch' && tool && (isDraw(tool) || tool === 'break' || tool === 'chamfer') ? ' cur-cross' : ''}`}>
         <Viewport bodies={snap.bodies} sketches={snap.sketches} activeSketch={activeSketch} theme={theme} mode={mode} tool={tool} pending={pending}
           hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} constPlanes={snap.planes} hiddenPlanes={hiddenPlanes} planeSheets={planeSheets} hoverPlane={hoverPlane} showGrid={showGrid} showAxes={showAxes} showDims={showDims} onDimEdit={dimEdited} showEdges={showEdges} showProfiles={showProfiles} snap={snapOn}
-          selectedFaces={mode === 'modify' ? facesSel : measure ? measure.flatMap((m) => (m.kind === 'face' ? [{ body: m.body, face: m.face }] : [])) : sel ? [sel] : []} pickFaces={mode === 'modify' && (FACE_TOOLS.includes(modTool) || BODY_TOOLS.includes(modTool) || PRIM_TOOLS.includes(modTool) || PLANE_TOOLS.includes(modTool))} selectedBodies={mode === 'modify' ? bodiesSel : mode === 'model' ? bodySel : []} onBodyPick={selectBody} selectedProfiles={profiles}
-          handle={dragHandle} handles={skMoveHandles ?? moveHandles} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setSel(f); setProfiles([]); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={skMove ? skMoveOutline : offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
+          selectedFaces={mode === 'modify' ? facesSel : measure ? measure.flatMap((m) => (m.kind === 'face' ? [{ body: m.body, face: m.face }] : [])) : [...(selMore ? [selMore] : []), ...(sel ? [sel] : [])]} pickFaces={mode === 'modify' && (FACE_TOOLS.includes(modTool) || BODY_TOOLS.includes(modTool) || PRIM_TOOLS.includes(modTool) || PLANE_TOOLS.includes(modTool))} selectedBodies={mode === 'modify' ? bodiesSel : mode === 'model' ? bodySel : []} onBodyPick={selectBody} selectedProfiles={profiles}
+          handle={dragHandle} triad={skMoveTriad ?? moveTriad} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setProfiles([]); if (f?.additive && sel) { setSelMore(sel); setSel(f); return; } setSelMore(null); setSel(f); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={skMove ? skMoveOutline : offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
           pickMode={mode !== 'sketch' ? null : !tool ? 'curve' : isDraw(tool) ? null : PICK_MODE[tool]} highlight={[...selected, ...picks.map((q) => q.id), ...(offsetPick ? [offsetPick] : [])]} showPoints={mode === 'sketch' && !!tool && !isDraw(tool) && PICK_MODE[tool] !== 'curve'}
           onProfilePick={profilePicked} onFaceSnap={faceSnap} onCursor={setCursor} apiRef={viewApi} />
 
@@ -1789,9 +1821,6 @@ export function App() {
         {confirm && (
           <div className="confirm" data-testid="confirm"><span>{confirm.text}</span><button onClick={() => setConfirm(null)}>Cancel</button><button className="primary" data-testid="confirm-ok" onClick={confirm.ok}>{confirm.label ?? 'Delete'}</button></div>
         )}
-        {mode === 'model' && face && (
-          <div className="seltip" data-testid="selection">Face {face.index} · {face.planeNormal ? 'plane' : face.cylinder ? `cylinder R${face.cylinder.radius.toFixed(2)}` : 'other'} · area ≈ {face.area.toFixed(1)} mm²</div>
-        )}
               </div>
 
       <Timeline items={snap.timeline} marker={snap.marker} selected={selTl} onSelect={setSelTl} onEdit={editItem} onMenu={(item, x, y) => setMenu({ x, y, item })}
@@ -1816,6 +1845,7 @@ export function App() {
 
       <div className="status" data-testid="status">
         <span data-testid="hint">{busy ? 'Working…' : hint || (snap.bodies.length ? `${snap.bodies.length} body, ${triangles} triangles; engine ${snap.ms} ms` : 'Ready')}</span>
+        {selInfo && <span className="selinfo" data-testid="selection">{selInfo}</span>}
         {mode === 'sketch' && cursor && <span className="coords" data-testid="coords">X {cursor[0].toFixed(2)}  Y {cursor[1].toFixed(2)} mm</span>}
         {notice && <span className="ok" data-testid="notice">{notice}</span>}
         {error && <span className="err" data-testid="error">{error}</span>}

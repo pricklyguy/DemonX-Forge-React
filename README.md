@@ -13,14 +13,15 @@ It shares the look and feel of DemonX CNC and DemonX Design (the same slate and 
 ## What it does
 
 **Sketching** (SKETCH tab, Fusion's keys: L R C A D T O)
-- Line (and midpoint line), 2-point, 3-point, centre and rounded rectangle, circles (centre, 2-point, 3-point), arcs (3-point, centre-point), slot, three kinds of polygon, ellipse, spline, point and **Text** (any font installed on your computer, by name); Trim, Extend, Offset (a whole connected outline moves, toward the pointer), Fillet, Chamfer, Break, Mirror, Scale, circular and rectangular patterns, and **Move / Copy** (M: type X, Y and a turn, or drag the arrows; the result is previewed first). Insert a DXF or SVG file into a sketch.
+- Line (and midpoint line), 2-point, 3-point, centre and rounded rectangle, circles (centre, 2-point, 3-point), arcs (3-point, centre-point), slot, three kinds of polygon, ellipse, spline, point and **Text** (any font installed on your computer, by name); Trim, Extend, Offset (a whole connected outline moves, toward the pointer), Fillet, Chamfer, Break, Mirror, Scale, circular and rectangular patterns, and **Move / Copy** (M: type X, Y and a turn, or drag the gizmo's arrows, square, dot and ring; the result is previewed first). Insert a DXF or SVG file into a sketch.
 - Constraints: coincident, horizontal / vertical, parallel, perpendicular, tangent, equal, concentric, midpoint, fix. Sketch dimensions (lengths, diameters and radii, angles between lines, distances between points or from a point to a line) you can double-click to change, shown on the sketch with a check box to hide them.
 - Drag to draw, or type the sizes into boxes on the shape. Snap hints as you draw: ends, centres, crossings, midpoints, and alignment with other points. Rubber-band selection (left to right: wholly inside; right to left: touching). Drag a point or a curve to move it.
 
 **Solid features** (SOLID tab: CREATE and MODIFY)
 - Create: **Box, Cylinder, Sphere and Torus**, Extrude (E, with a live preview and a drag arrow), Revolve, Sweep, Loft, Rib, Pipe, Coil, Emboss, Mirror, Rectangular and Circular Pattern, Hole (simple, counterbore, countersink; H).
-- Modify: Fillet (F), Chamfer, Press Pull (Q; E on a selected face does the same), Shell, Offset Face, Draft, Combine (join, cut, intersect), Move / Copy (M, with X / Y / Z arrows, a step selector and turns), Split Body, Scale, Thread, Mesh to Solid.
+- Modify: Fillet (F), Chamfer, Press Pull (Q; E on a selected face does the same), Shell, Offset Face, Draft, Combine (join, cut, intersect), Move / Copy (M, with a gizmo of arrows, plane squares, a centre dot and turning rings, a step selector and turns), Split Body, Scale, Thread, Mesh to Solid.
 - Pick the edges first and then press F (or Fillet), as in Fusion, or press the key first; type the number right after it. Measure (INSPECT tab, I) gives distances, angles, lengths and diameters between points, edges and faces.
+- The bar along the bottom measures what is selected: a face's area, an edge's length, and with Shift or Ctrl a second pick gives the distance and angle between the two.
 - Select a face and press the key, or right-click anything for a menu of what applies. Every command is also on the ribbon, which wraps to a second row in a narrow window.
 
 **Construction planes** (offset, at an angle, midplane; also from two flat faces) can be sketched on like the origin planes; `docs/guides/construct-planes.md` explains them.

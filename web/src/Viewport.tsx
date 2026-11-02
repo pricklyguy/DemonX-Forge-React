@@ -7,6 +7,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { Body, Sketch, SketchCurve, Vec2, Vec3 } from './api';
 import { loopPolygon, curvePoints } from './sketch/loops';
 import { findRegions } from './sketch/regions';
+import { arrowShape, snapTo, solve2, turnDegrees, len2, type TriadSpec, type V2 } from './triad';
 import { ORIGIN_PLANES, dot as dot3, normalOf, rayToSketch, sub as sub3, toSketch, toWorld, type Plane } from './sketch/plane';
 import { niceStep, round3, snapGrid } from './sketch/snap';
 import { inferSnap, type Inference } from './sketch/inference';
@@ -19,7 +20,7 @@ import { applyTyped, sizeBoxes } from './sketch/tools';
 import type { ConstructionPlane } from './api';
 import type { EdgeRef, Mode, PlanePick, ProfileRef, Tool, ViewApi } from './ui';
 
-export interface FacePick { body: string; face: number; point: Vec3 }
+export interface FacePick { body: string; face: number; point: Vec3; /** Shift, Ctrl or Cmd was held: add to the selection (the info bar measures two picks). */ additive?: boolean }
 
 /** A draggable arrow: starts `base` mm along `dir` from `origin` and ends `value` further on. */
 export type Handle = { origin: Vec3; dir: Vec3; value: number; base?: number; /** When set the arrow is drawn this long whatever `value` is (Move: the arrows stay with the body, `value` is only what dragging changes) */ fixed?: number; color?: string; label?: string; onChange(v: number): void; onSubmit?(): void };
@@ -62,6 +63,8 @@ interface Props {
   handle?: Handle | null;
   /** Several arrows at once (Move: one per axis). Used in place of `handle` when given. */
   handles?: Handle[];
+  /** The move / turn gizmo (Move in the model view, Move / Copy in a sketch): arrows, plane squares, a centre dot and rings, drawn over the view at a fixed size. */
+  triad?: TriadSpec | null;
   onEdgePick(ref: EdgeRef | null, additive: boolean): void;
   /** The Measure tool is open: a click picks a vertex, an edge or a face (in that order of preference) and is reported here instead of selecting. */
   measuring?: boolean;
@@ -779,7 +782,7 @@ export function Viewport(props: Props) {
         }
         const b = hit && (hit.object.userData.body as Body | undefined);
         if (e.altKey && p.mode === 'modify' && hit && b && hit.faceIndex != null) { p.onFaceSnap?.({ body: b.name, face: b.faceIds[hit.faceIndex] ?? 0, point: hit.point.toArray() as Vec3 }); return; } // Alt + click: reach this face
-        if (hit && b && hit.faceIndex != null) p.onFacePick({ body: b.name, face: b.faceIds[hit.faceIndex] ?? 0, point: hit.point.toArray() as Vec3 });
+        if (hit && b && hit.faceIndex != null) p.onFacePick({ body: b.name, face: b.faceIds[hit.faceIndex] ?? 0, point: hit.point.toArray() as Vec3, additive: e.shiftKey || e.ctrlKey || e.metaKey });
         else p.onFacePick(null);
       }
     });
@@ -815,10 +818,137 @@ export function Viewport(props: Props) {
         }
       },
     };
+
+    // ---- the move / turn gizmo: SVG over the view, so it keeps one size on the screen whatever the zoom
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    const triadSvg = document.createElementNS(SVGNS, 'svg'); triadSvg.setAttribute('class', 'triadlayer'); el.appendChild(triadSvg);
+    const mk = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}, parent: Element = triadSvg) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v)); parent.appendChild(n); return n; };
+    type TPart = { kind: 'arrow' | 'plane' | 'center' | 'ring'; i: number; j?: number };
+    let triadShape = '', triadEls: { rings: { g: SVGGElement; hit: SVGPathElement; line: SVGPathElement; discs: SVGCircleElement[] }[]; planes: { poly: SVGPolygonElement; i: number; j: number }[]; arrows: { g: SVGGElement; shaftD: SVGLineElement; shaft: SVGLineElement; cone: SVGPolygonElement; hit: SVGLineElement; text: SVGTextElement; sym: SVGGElement; symMark: SVGElement }[]; center: SVGGElement } | null = null;
+    let triadNow: { o: V2; arrowTip: (V2 | null)[]; planeAt: Record<string, V2>; ringAt: V2[][] } | null = null;
+    const TRIAD_L = 84, TRIAD_R = 104;
+    const buildTriad = (T: TriadSpec) => {
+      triadSvg.replaceChildren();
+      const els: NonNullable<typeof triadEls> = { rings: [], planes: [], arrows: [], center: undefined as unknown as SVGGElement };
+      (T.rings ?? []).forEach((r, k) => {
+        const g = mk('g', { class: 'tri-ring', 'data-testid': `triad-ring-${r.label}` }), hit = mk('path', { class: 'tri-hit', fill: 'none', 'stroke-width': 18 }, g), line = mk('path', { class: 'tri-ringline', fill: 'none', stroke: r.color, 'stroke-width': 1.6 }, g);
+        const discs = [0, 1, 2, 3].map(() => mk('circle', { class: 'tri-disc', r: 6.5, stroke: r.color }, g));
+        for (const n of [hit, ...discs]) n.addEventListener('pointerdown', (e) => beginTriad({ kind: 'ring', i: k }, e as PointerEvent));
+        els.rings.push({ g, hit, line, discs });
+      });
+      for (let i = 0; i < T.axes.length; i++) for (let j = i + 1; j < T.axes.length; j++) {
+        const poly = mk('polygon', { class: 'tri-plane', 'data-testid': `triad-plane-${T.axes[i]!.label}${T.axes[j]!.label}` });
+        poly.addEventListener('pointerdown', (e) => beginTriad({ kind: 'plane', i, j }, e as PointerEvent)); els.planes.push({ poly, i, j });
+      }
+      T.axes.forEach((a, i) => {
+        const g = mk('g', { class: 'tri-arrow', 'data-testid': `triad-arrow-${a.label}` });
+        const hit = mk('line', { class: 'tri-hit', 'stroke-width': 22, 'stroke-linecap': 'round' }, g), shaftD = mk('line', { class: 'tri-dark', 'stroke-width': 6.5, 'stroke-linecap': 'round' }, g), shaft = mk('line', { class: 'tri-light', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+        const cone = mk('polygon', { class: 'tri-cone' }, g), text = mk('text', { class: 'tri-label', fill: a.color }, g); text.textContent = a.label;
+        const sym = mk('g', { class: 'tri-sym' }, g); mk('circle', { r: 9, class: 'tri-cone' }, sym); const symMark = mk('circle', { r: 2.6, class: 'tri-dot' }, sym);
+        for (const n of [hit, cone, sym]) n.addEventListener('pointerdown', (e) => beginTriad({ kind: 'arrow', i }, e as PointerEvent));
+        els.arrows.push({ g, shaftD, shaft, cone, hit, text, sym, symMark });
+      });
+      const c = mk('g', { class: 'tri-center', 'data-testid': 'triad-center' }); mk('circle', { r: 11, class: 'tri-hit' }, c); mk('circle', { r: 7.5, class: 'tri-cone' }, c); mk('circle', { r: 2.6, class: 'tri-dot' }, c);
+      c.addEventListener('pointerdown', (e) => beginTriad({ kind: 'center', i: -1 }, e as PointerEvent)); els.center = c;
+      triadEls = els;
+    };
+    const syncTriad = () => {
+      const T = P.current.triad;
+      if (!T) { if (triadShape) { triadSvg.replaceChildren(); triadShape = ''; triadEls = null; triadNow = null; } return; }
+      const shape = `${T.axes.map((a) => a.label).join('')}|${(T.rings ?? []).map((a) => a.label).join('')}`;
+      if (shape !== triadShape || !triadEls) { triadShape = shape; buildTriad(T); }
+      const els = triadEls!;
+      triadSvg.setAttribute('width', String(size.x)); triadSvg.setAttribute('height', String(size.y));
+      const o3 = new THREE.Vector3(...T.origin), dist = cam.position.distanceTo(o3), wppO = (2 * dist * Math.tan((cam.fov * Math.PI) / 360)) / Math.max(size.y, 1);
+      const px = (v: THREE.Vector3): V2 => { const q = v.clone().project(cam); return [((q.x + 1) / 2) * size.x, ((1 - q.y) / 2) * size.y]; };
+      const o = px(o3), view = o3.clone().sub(cam.position).normalize(), k = wppO * 60;
+      const f = (n: number) => n.toFixed(1), pt = (q: V2) => `${f(q[0])},${f(q[1])}`;
+      const now: NonNullable<typeof triadNow> = { o, arrowTip: [], planeAt: {}, ringAt: [] };
+      const vecs: V2[] = [];
+      T.axes.forEach((a, i) => {
+        const d = new THREE.Vector3(...a.dir), p2 = px(o3.clone().addScaledVector(d, k)), sd: V2 = [p2[0] - o[0], p2[1] - o[1]];
+        const sh = arrowShape(a.dir, view.toArray() as [number, number, number], sd, TRIAD_L), E = els.arrows[i]!;
+        const tip: V2 = [o[0] + sh.dir[0] * sh.length, o[1] + sh.dir[1] * sh.length];
+        vecs.push([sh.dir[0] * sh.length, sh.dir[1] * sh.length]);
+        E.g.classList.toggle('endon', sh.endOn !== null);
+        if (sh.endOn) { // pointing at the viewer (a dot in a circle) or away (a cross): drawn beside the centre
+          const off: V2 = [(i % 2 ? -1 : 1) * 26, (i < 2 ? -1 : 1) * 22];
+          E.sym.setAttribute('transform', `translate(${f(o[0] + off[0])} ${f(o[1] + off[1])})`);
+          E.hit.setAttribute('x1', f(o[0])); E.hit.setAttribute('y1', f(o[1])); E.hit.setAttribute('x2', f(o[0])); E.hit.setAttribute('y2', f(o[1]));
+          E.text.setAttribute('x', f(o[0] + off[0] + 12)); E.text.setAttribute('y', f(o[1] + off[1] + 4));
+          now.arrowTip.push([o[0] + off[0], o[1] + off[1]]); return;
+        }
+        const ux = sh.dir[0], uy = sh.dir[1], nx = -uy, ny = ux, a0: V2 = [o[0] + ux * 16, o[1] + uy * 16], h = 14, w = 8, base: V2 = [tip[0] - ux * h, tip[1] - uy * h];
+        for (const [n, v] of [[E.shaft, base], [E.shaftD, base]] as const) { n.setAttribute('x1', f(a0[0])); n.setAttribute('y1', f(a0[1])); n.setAttribute('x2', f(v[0])); n.setAttribute('y2', f(v[1])); }
+        E.hit.setAttribute('x1', f(o[0] + ux * 14)); E.hit.setAttribute('y1', f(o[1] + uy * 14)); E.hit.setAttribute('x2', f(tip[0])); E.hit.setAttribute('y2', f(tip[1]));
+        E.cone.setAttribute('points', `${pt(tip)} ${pt([base[0] + nx * w, base[1] + ny * w])} ${pt([base[0] - nx * w, base[1] - ny * w])}`);
+        E.text.setAttribute('x', f(tip[0] + ux * 14 - 4)); E.text.setAttribute('y', f(tip[1] + uy * 14 + 5));
+        now.arrowTip.push(tip);
+      });
+      for (const { poly, i, j } of els.planes) {
+        const vi = vecs[i]!, vj = vecs[j]!, a = 0.28, b = 0.52, c = (s: number, t: number): V2 => [o[0] + vi[0] * s + vj[0] * t, o[1] + vi[1] * s + vj[1] * t];
+        const area = Math.abs(vi[0] * vj[1] - vi[1] * vj[0]);
+        poly.setAttribute('points', [c(a, a), c(b, a), c(b, b), c(a, b)].map(pt).join(' '));
+        poly.style.display = area < 1500 ? 'none' : ''; // the two arrows nearly line up on the screen: no square
+        now.planeAt[`${T.axes[i]!.label}${T.axes[j]!.label}`] = c(0.4, 0.4);
+      }
+      (T.rings ?? []).forEach((r, kk) => {
+        const E = els.rings[kk]!, n = new THREE.Vector3(...r.dir), a = Math.abs(n.z) < 0.9 ? new THREE.Vector3(0, 0, 1).cross(n).normalize() : new THREE.Vector3(1, 0, 0).cross(n).normalize(), b = n.clone().cross(a);
+        const pts: V2[] = []; for (let t = 0; t <= 64; t++) { const th = (t / 64) * Math.PI * 2; pts.push(px(o3.clone().addScaledVector(a, Math.cos(th) * TRIAD_R * wppO).addScaledVector(b, Math.sin(th) * TRIAD_R * wppO))); }
+        const dstr = pts.map((q, ii) => `${ii ? 'L' : 'M'}${pt(q)}`).join(' '); E.line.setAttribute('d', dstr); E.hit.setAttribute('d', dstr);
+        const at: V2[] = []; E.discs.forEach((c, ii) => { const q = pts[ii * 16]!; c.setAttribute('cx', f(q[0])); c.setAttribute('cy', f(q[1])); at.push(q); });
+        now.ringAt.push(at);
+        E.g.classList.toggle('edgeon', Math.abs(n.dot(view)) < 0.12);
+      });
+      els.center.setAttribute('transform', `translate(${f(o[0])} ${f(o[1])})`);
+      triadNow = now;
+    };
+    type TDrag = { part: TPart; m0: V2; o: V2; dirsPx: V2[]; right: THREE.Vector3; up: THREE.Vector3; wppO: number; facing: number; target: Element; id: number };
+    let triadDrag: TDrag | null = null;
+    const beginTriad = (part: TPart, e: PointerEvent) => {
+      const T = P.current.triad; if (!T || e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const r = dom.getBoundingClientRect(), o3 = new THREE.Vector3(...T.origin), wppO = (2 * cam.position.distanceTo(o3) * Math.tan((cam.fov * Math.PI) / 360)) / Math.max(size.y, 1);
+      const px = (v: THREE.Vector3): V2 => { const q = v.clone().project(cam); return [((q.x + 1) / 2) * size.x, ((1 - q.y) / 2) * size.y]; };
+      const o = px(o3), k = wppO * 60, dirsPx = T.axes.map((a) => { const q = px(o3.clone().addScaledVector(new THREE.Vector3(...a.dir), k)); return [(q[0] - o[0]) / k, (q[1] - o[1]) / k] as V2; }); // pixels per mm along each axis
+      const camRight = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0), camUp = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
+      const ringDir = part.kind === 'ring' ? new THREE.Vector3(...T.rings![part.i]!.dir) : null;
+      triadDrag = { part, m0: [e.clientX - r.left, e.clientY - r.top], o, dirsPx, right: camRight, up: camUp, wppO, facing: ringDir ? ringDir.dot(cam.position.clone().sub(o3)) : 1, target: e.currentTarget as Element, id: e.pointerId };
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      if (part.kind === 'ring') T.onTurn?.(part.i, 0, 'start'); else T.onMove(T.axes.map(() => 0), 'start');
+      window.addEventListener('pointermove', moveTriad); window.addEventListener('pointerup', endTriad); window.addEventListener('pointercancel', endTriad);
+    };
+    const triadDelta = (e: PointerEvent) => {
+      const T = P.current.triad, d = triadDrag; if (!T || !d) return null;
+      const r = dom.getBoundingClientRect(), m: V2 = [e.clientX - r.left, e.clientY - r.top], dm: V2 = [m[0] - d.m0[0], m[1] - d.m0[1]], step = (T.step ?? 0.5) * (e.shiftKey ? 0.1 : 1);
+      if (d.part.kind === 'ring') return { turn: snapTo(turnDegrees(d.o, d.m0, m, d.facing), (T.angleStep ?? 15) * (e.shiftKey ? 1 / 15 : 1)) };
+      const out = T.axes.map(() => 0);
+      const inPlane = (i: number, j: number) => { const ab = solve2(d.dirsPx[i]!, d.dirsPx[j]!, dm); if (ab) { out[i] = snapTo(ab[0], step); out[j] = snapTo(ab[1], step); } };
+      if (d.part.kind === 'arrow') { const u = d.dirsPx[d.part.i]!, l = len2(u); if (l > 0.2) out[d.part.i] = snapTo((dm[0] * u[0] + dm[1] * u[1]) / (l * l), step); }
+      else if (d.part.kind === 'plane') inPlane(d.part.i, d.part.j!);
+      else if (T.axes.length === 2) inPlane(0, 1);
+      else { const w = d.right.clone().multiplyScalar(dm[0] * d.wppO).addScaledVector(d.up, -dm[1] * d.wppO); T.axes.forEach((a, i) => { out[i] = snapTo(w.dot(new THREE.Vector3(...a.dir)), step); }); }
+      return { move: out };
+    };
+    const moveTriad = (e: PointerEvent) => {
+      const T = P.current.triad, r = triadDelta(e); if (!T || !r || !triadDrag) return;
+      if (r.turn !== undefined) T.onTurn?.(triadDrag.part.i, r.turn, 'move'); else if (r.move) T.onMove(r.move, 'move');
+    };
+    const endTriad = () => {
+      window.removeEventListener('pointermove', moveTriad); window.removeEventListener('pointerup', endTriad); window.removeEventListener('pointercancel', endTriad);
+      const T = P.current.triad, d = triadDrag; triadDrag = null; if (!T || !d) return;
+      if (d.part.kind === 'ring') T.onTurn?.(d.part.i, 0, 'end'); else T.onMove(T.axes.map(() => 0), 'end');
+    };
+    // for the browser checks: where the parts are on the page (not just in the view)
+    (window as any).__forgeTriad = () => {
+      if (!triadNow) return null;
+      const r = dom.getBoundingClientRect(), sh = (q: V2 | null): V2 | null => (q ? [q[0] + r.left, q[1] + r.top] : null), n = triadNow;
+      return { o: sh(n.o), arrowTip: n.arrowTip.map(sh), planeAt: Object.fromEntries(Object.entries(n.planeAt).map(([k, v]) => [k, sh(v)])), ringAt: n.ringAt.map((a) => a.map(sh)) };
+    };
     let raf = 0, firstFit = false;
     const loop = () => {
       raf = requestAnimationFrame(loop); ctl.update(); updateGrid(); renderer.render(scene, cam);
-      syncHandleInput();
+      syncHandleInput(); syncTriad();
       liveInputs.forEach((inp, i) => {
         const an = liveAnchors[i]; if (!an) return;
         const q = an.w.clone().project(cam); inp.style.left = `${((q.x + 1) / 2) * size.x}px`; inp.style.top = `${((1 - q.y) / 2) * size.y}px`;
@@ -847,7 +977,7 @@ export function Viewport(props: Props) {
     };
     const fitOnce = () => { if (!firstFit && gBodies.children.length) { firstFit = true; fit(); } };
     (S.current as any).fitOnce = fitOnce;
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); ctl.dispose(); renderer.dispose(); el.removeChild(dom); S.current = null; endBand(); labelLayer.remove(); planeLayer.remove(); handleInputs.forEach((x) => x.remove()); liveInputs.length = 0; liveLayer.remove(); delete (window as any).__forge; };
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); ctl.dispose(); renderer.dispose(); el.removeChild(dom); S.current = null; endBand(); labelLayer.remove(); planeLayer.remove(); triadSvg.remove(); window.removeEventListener('pointermove', moveTriad); window.removeEventListener('pointerup', endTriad); delete (window as any).__forgeTriad; handleInputs.forEach((x) => x.remove()); liveInputs.length = 0; liveLayer.remove(); delete (window as any).__forge; };
   }, []);
 
   const p = props;

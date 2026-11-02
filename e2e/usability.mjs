@@ -52,10 +52,10 @@ check(await p.getByLabel('Move X', { exact: true }).inputValue() === '25', 'the 
 await p.getByLabel('Move step').selectOption('1');
 await p.getByLabel('X minus').click();
 check(await p.getByLabel('Move X', { exact: true }).inputValue() === '24', 'a step of 1 mm: minus gives 24');
-const arrows = await p.evaluate(() => [0, 1, 2].map((i) => window.__forge.handleTip(i)));
-check(arrows.every((a) => a) && arrows[0].value === 24, 'three arrows are on the body (X shows 24)', JSON.stringify(arrows.map((a) => a && a.value)));
-// drag the Y arrow
-const ay = arrows[1].at; await p.mouse.move(ay[0], ay[1]); await p.mouse.down(); await p.mouse.move(ay[0] + 30, ay[1] - 30, { steps: 6 }); await p.mouse.up(); await settle(400);
+const tri = await p.evaluate(() => window.__forgeTriad());
+check(tri && tri.arrowTip.length === 3, 'the gizmo has three arrows on the body', JSON.stringify(tri && tri.arrowTip));
+// drag the Y arrow (by its shaft, a little way out)
+const ay = [tri.o[0] + (tri.arrowTip[1][0] - tri.o[0]) * 0.75, tri.o[1] + (tri.arrowTip[1][1] - tri.o[1]) * 0.75]; await p.mouse.move(ay[0], ay[1]); await p.mouse.down(); await p.mouse.move(ay[0] + 30, ay[1] - 30, { steps: 6 }); await p.mouse.up(); await settle(400);
 const yv = Number(await p.getByLabel('Move Y', { exact: true }).inputValue());
 check(Math.abs(yv) > 1, 'dragging the Y arrow changes Move Y', String(yv));
 await p.getByLabel('Move Y', { exact: true }).fill('0');

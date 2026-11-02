@@ -23,7 +23,7 @@ SolidCraft changes daily and its command names are not stable, so the commit is 
 ## What we know about the engine
 
 - **A sketch on a face needs an exact pick:** `sketch.create` with `plane: {face: [x,y,z], body, index}`; a point and body alone are refused.
-- **Standard planes:** XY is x right, y up (normal +Z); XZ has sketch y pointing down the world's Z (normal +Y); YZ has x = world Y, y = world Z (normal +X). The camera's up vector follows the sketch's y axis, otherwise a sketch on XZ looks upside down.
+- **Standard planes:** XY is x right, y up (normal +Z); the engine's XZ has sketch y pointing down the world's Z (normal +Y), which is the Front plane seen from behind and upside down, so Forge creates it with `flip: true` (SolidCraft 0.29): x right, y = world Z, normal -Y, seen from the front. YZ has x = world Y, y = world Z (normal +X). The camera's up vector follows the sketch's y axis.
 - **Unknown parameters are silently ignored** by the engine; our adapter checks names against the engine's command list and reports unknown ones (`unknownParamNames`).
 - **A failed batch comes back as JSON** with `rolled_back: true`; the adapter turns it into a sentence and the design is unchanged.
 - **Centre Rectangle also draws two construction diagonals:** four solid lines and two construction lines.
@@ -39,4 +39,5 @@ SolidCraft changes daily and its command names are not stable, so the commit is 
 - **Construction planes** are described by `timeline.inspect`; an earlier plane is referred to by name (SolidCraft up to 0.19) or by feature number (0.29). The adapter accepts both.
 - **Torus joins are slow** in the engine (seconds for an overlapping join), so a Torus starts as a New Body.
 - **Section DXF:** SolidCraft 0.19 leaves out the side of a section piece that meets a hole; 0.29 gives closed pieces.
+- **The move / turn gizmo** (`web/src/triad.ts`, drawn in `Viewport.tsx` as an SVG layer over the view) is built from a spec (origin, arrow axes, ring axes, callbacks), so Move in a sketch and on a body share it. Parts: arrows, a square between two arrows, a centre dot, rings. Drags are worked out on the screen (pixels per millimetre along each axis at the gizmo's depth) and give millimetres and degrees.
 - **Keyboard focus:** a ticked checkbox must not block shortcuts. Only text boxes, lists and text areas own the keyboard.

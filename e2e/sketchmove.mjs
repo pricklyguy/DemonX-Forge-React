@@ -41,12 +41,13 @@ check(await p.getByTestId('skmove-dialog').isVisible(), 'M opens the Move / Copy
 // typing shows a preview and the arrows follow
 await p.getByTestId('skmove-dx').fill('15'); await settle(400);
 check(near(await bbox(), [10, 10, 50, 30]), 'typing alone does not change the sketch yet');
-// the X arrow: drag it 10 mm further along the sketch X
-// the X arrow in the view: grab its shaft and drag it 10 mm along X: dx goes from 15 to 25
+// the gizmo: grab the X arrow by its shaft and drag it 10 mm along X: dx goes to about 10
 await p.getByTestId('skmove-dx').fill('0'); await settle(300);
 {
-  const [gx, gy] = await at([30 + 8, 20]), [hx, hy] = await at([30 + 18, 20]);
-  await p.mouse.move(gx, gy); await p.mouse.down(); await p.mouse.move(hx, hy, { steps: 8 }); await p.mouse.up(); await settle(300);
+  const tri = await p.evaluate(() => window.__forgeTriad());
+  const [ox, oy] = await at([30, 20]), [x10, y10] = await at([40, 20]), pxmm = Math.hypot(x10 - ox, y10 - oy) / 10;
+  const gx = tri.o[0] + (tri.arrowTip[0][0] - tri.o[0]) * 0.6, gy = tri.o[1] + (tri.arrowTip[0][1] - tri.o[1]) * 0.6;
+  await p.mouse.move(gx, gy); await p.mouse.down(); await p.mouse.move(gx + 10 * pxmm, gy, { steps: 8 }); await p.mouse.up(); await settle(300);
   const dx = Number(await p.getByTestId('skmove-dx').inputValue());
   check(Math.abs(dx - 10) < 1.5, 'dragging the X arrow 10 mm sets dx to about 10', String(dx));
 }
