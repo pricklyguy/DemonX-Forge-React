@@ -18,6 +18,8 @@ What is settled about how Forge is built, and what we know about the modelling e
 
 The DemonX suite is moving from browser-based tools to installed desktop apps built on Electron. Forge and DemonX Design have no need of the network (only the CNC client needs LAN access, which Electron keeps), so how they are packaged is open. Intended shape: an Electron shell that starts the Forge server and the engine itself (no "start the server, then open the browser" steps, no console window), native menus and file dialogs, file associations for `.forge`, and an updater that replaces the present Update now. The server stays loopback-only until it can be reached by IPC instead of a port. Until then Forge runs as a local server with an installable web app window (File > Install Forge as an app).
 
+**Platforms:** Forge must run on both Windows and Linux (x86-64; ARM where practical), with Linux a first-class target, not an afterthought. Any packaging or toolkit choice is checked against that: Windows-only options (WebView2 shells, WinUI) are out; Tauri is weak on Linux (WebKitGTK); Electron gives the same Chromium on both, but needs a graphics fallback setting, a sandbox profile for newer Ubuntu releases, and testing under both Wayland and X11.
+
 ## The engine, and how it is pinned
 
 SolidCraft's headless CLI (`tangency-labs/solidcraft`, MIT OR Apache-2.0) does the modelling. Forge does not bundle its source: the Windows and Linux packages are built by GitHub Actions (`.github/workflows/package.yml`), which compiles `solidcraft-cli` from the commit named in `engine/SOLIDCRAFT_REF`, smoke-tests it, and bundles it with the server, the web app, its own Node and the engine's licence files.
