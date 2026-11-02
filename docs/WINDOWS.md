@@ -24,6 +24,8 @@ d. For an icon on your desktop, double-click  "Create Desktop Shortcut.bat"  onc
   If the page does not open by itself, type  http://127.0.0.1:8120  into your browser.
 - "Windows protected your PC" (SmartScreen)? Press "More info", then "Run anyway". The files are not signed with a
   paid certificate. The engine (solidcraft-cli.exe) may be asked about too: same answer.
+- Forge opens on its Start page (new, open, your recent designs). Press Esc or "Back to ..." to go to the design; File > Preferences can switch the Start page off.
+- In Chrome or Edge, File > "Install Forge as an app..." gives Forge its own window and taskbar icon, without tabs or an address bar. The black window still has to be running.
 - Windows Firewall may ask about "Node.js JavaScript Runtime". You can press Cancel: Forge only talks to this
   computer and does not need the network.
 - Try a part from nothing: press Create Sketch, click the blue square on the floor (the XY plane), press R, click two

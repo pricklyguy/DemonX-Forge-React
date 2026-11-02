@@ -24,7 +24,7 @@ export function rayToSketch(p: Plane, o: Vec3, d: Vec3): Vec2 | null {
   return toSketch(p, add(o, scale(d, t)));
 }
 
-/** The three origin planes as the engine orients them (see docs/PLAN.md): sketch y on XZ points down the world's Z. */
+/** The three origin planes as the engine orients them (see docs/DESIGN.md): sketch y on XZ points down the world's Z. */
 export const ORIGIN_PLANES: Record<'XY' | 'XZ' | 'YZ', Plane> = {
   XY: { origin: [0, 0, 0], xDir: [1, 0, 0], yDir: [0, 1, 0] },
   XZ: { origin: [0, 0, 0], xDir: [1, 0, 0], yDir: [0, 0, -1] },

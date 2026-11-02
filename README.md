@@ -8,28 +8,33 @@ A Fusion-style parametric 3D CAD application, by Prickly Guy Creations. Sketch o
 
 It shares the look and feel of DemonX CNC and DemonX Design (the same slate and teal palette, dark and light), not their code. Parts leave Forge as STEP, STL, 3MF, OBJ or DXF files, to be opened in any other program (DemonX Design for 2.5D CAM, a slicer, another CAD). Parts come in as STEP, IGES, STL, OBJ or 3MF.
 
-**Status:** usable and still growing. The owner tests each release on Windows; development and the automated checks run on Linux against the real modelling engine. Each release's notes (`docs/releases/`) say what was and was not tried.
+**Status:** usable and still growing. The maintainer tests each release on Windows; development and the automated checks run on Linux against the real modelling engine. Each release's notes (`docs/releases/`) say what was and was not tried.
 
 ## What it does
 
 **Sketching** (SKETCH tab, Fusion's keys: L R C A D T O)
-- Line, 2-point and centre rectangle, centre circle and 2-point circle, 3-point arc, slot; Trim, Extend, Offset (a whole connected outline moves, toward the pointer), sketch Fillet.
+- Line (and midpoint line), 2-point, 3-point, centre and rounded rectangle, circles (centre, 2-point, 3-point), arcs (3-point, centre-point), slot, three kinds of polygon, ellipse, spline, point and **Text** (any font installed on your computer, by name); Trim, Extend, Offset (a whole connected outline moves, toward the pointer), Fillet, Chamfer, Break, Mirror, Scale, circular and rectangular patterns, and **Move / Copy** (M: type X, Y and a turn, or drag the arrows; the result is previewed first). Insert a DXF or SVG file into a sketch.
 - Constraints: coincident, horizontal / vertical, parallel, perpendicular, tangent, equal, concentric, midpoint, fix. Sketch dimensions (lengths, diameters and radii, angles between lines, distances between points or from a point to a line) you can double-click to change, shown on the sketch with a check box to hide them.
 - Drag to draw, or type the sizes into boxes on the shape. Snap hints as you draw: ends, centres, crossings, midpoints, and alignment with other points. Rubber-band selection (left to right: wholly inside; right to left: touching). Drag a point or a curve to move it.
 
 **Solid features** (SOLID tab: CREATE and MODIFY)
-- Create: Extrude (E, with a live preview and a drag arrow), Revolve, Sweep, Loft, Rib, Pipe, Coil, Emboss, Mirror, Rectangular and Circular Pattern, Hole (simple, counterbore, countersink; H).
+- Create: **Box, Cylinder, Sphere and Torus**, Extrude (E, with a live preview and a drag arrow), Revolve, Sweep, Loft, Rib, Pipe, Coil, Emboss, Mirror, Rectangular and Circular Pattern, Hole (simple, counterbore, countersink; H).
 - Modify: Fillet (F), Chamfer, Press Pull (Q; E on a selected face does the same), Shell, Offset Face, Draft, Combine (join, cut, intersect), Move / Copy (M, with X / Y / Z arrows, a step selector and turns), Split Body, Scale, Thread, Mesh to Solid.
 - Pick the edges first and then press F (or Fillet), as in Fusion, or press the key first; type the number right after it. Measure (INSPECT tab, I) gives distances, angles, lengths and diameters between points, edges and faces.
 - Select a face and press the key, or right-click anything for a menu of what applies. Every command is also on the ribbon, which wraps to a second row in a narrow window.
+
+**Construction planes** (offset, at an angle, midplane; also from two flat faces) can be sketched on like the origin planes; `docs/guides/construct-planes.md` explains them.
+
+**Bodies:** select a whole body (double-click it, or in the browser), rename it, hide it; export chosen bodies as one STL each (a zip) or one 3MF, or **open them in a slicer** that is installed on your computer.
 
 **Editing history**
 - The timeline strip along the bottom and the browser tree on the left: double-click a step to change it (sketches, extrudes, fillets, hole values and more) and everything built on it rebuilds. Rename, suppress, roll history back, delete with a warning of what depends on it.
 - Parameters: a named value (`width = 60`) that features use; change it in the browser and the part follows.
 - Undo and redo (Ctrl+Z, Ctrl+Y).
+- File > Preferences: whether Forge opens on the Start page, whether the origin planes, sketch axes and plane sheets are drawn.
 
 **Files**
-- `.forge` files: File > New, Open, Save, Save As, with the unsaved marker and a warning before you lose changes. Chrome and Edge give you the normal Windows file windows; other browsers download the file.
+- `.forge` files: File > New, Open, Save, Save As, with the unsaved marker and a warning before you lose changes. Chrome and Edge give you the normal Windows file windows; other browsers download the file. The Start page (the house button, and the first thing you see) lists your recent designs with a small picture.
 - Export: STEP, STL, 3MF, OBJ for bodies; DXF of a sketch, of a flat face, or of a section cut through a body (for DemonX Design or a laser / CNC program).
 - Import: STEP and IGES (a new component), and **STL, OBJ and 3MF** as mesh bodies. A mesh import asks whether to centre the part on the origin on the floor.
 - **Mesh to Solid** rebuilds a mesh as real, editable sketches and extrudes: parts made of flat steps and straight or evenly leaning walls along one main direction (plates, lips, ribs, drafted walls, round and slotted holes, rounded corners), with holes, countersinks and bosses across it. The result is checked against the mesh's volume; sculpted shapes are refused with a reason and nothing is changed. One Ctrl+Z takes it all back.
@@ -40,13 +45,15 @@ It shares the look and feel of DemonX CNC and DemonX Design (the same slate and 
 **Letting an AI use it (MCP)**
 - Forge has an MCP server, so Claude (Desktop, Code), OpenAI's Codex and other MCP clients can read the open design, run modelling commands, measure, take screenshots and undo, while you watch the window follow along. It cannot open, save or delete files. How to connect each one: [`docs/MCP.md`](docs/MCP.md).
 
+**Install as an app.** In Chrome or Edge, File > Install Forge as an app… gives Forge its own window and taskbar icon without tabs or an address bar. (Forge's server still has to be running.)
+
 **Mouse and keys**
 - Wheel zooms toward the pointer; middle-drag pans; Shift + middle-drag orbits; the cube at the top right and the buttons under the view jump to standard views. `?` lists every key.
 - Z is up. Lengths are millimetres and angles are degrees everywhere.
 
 ## Install (Windows)
 
-1. Download `DemonX-Forge-<version>-windows-x64.zip` from the [Releases page](https://github.com/pricklyguy/DemonX-Forge/releases), right-click it, Properties, tick Unblock if offered.
+1. Download `DemonX-Forge-<version>-windows-x64.zip` from the [Releases page](https://github.com/pricklyguy/DemonX-Forge-React/releases), right-click it, Properties, tick Unblock if offered.
 2. Right-click, Extract All, type `C:\` as the place.
 3. Open `C:\DemonX-Forge` and double-click `Start DemonX Forge.bat`. Your browser opens Forge (or go to `http://127.0.0.1:8120`).
 
@@ -72,7 +79,7 @@ On Windows, `Create Desktop Shortcut.bat` puts an icon on the desktop and `Start
 
 ```bash
 npm install
-# the engine: put solidcraft-cli at data/engine/solidcraft-cli (or set FORGE_ENGINE), see docs/PLAN.md
+# the engine: put solidcraft-cli at data/engine/solidcraft-cli (or set FORGE_ENGINE), see docs/DESIGN.md
 npm run build && npm start      # http://127.0.0.1:8120
 npm run dev:server              # and, in another terminal: npm run dev:web
 npm run typecheck && npm test   # unit tests (several use the real engine and skip themselves without it)
@@ -89,17 +96,17 @@ A Node server runs a modelling engine as a hidden process (today SolidCraft's he
 
 | | |
 |---|---|
-| `docs/PLAN.md` | Decisions with dates and reasons, engine findings, what each release added, what is next. Start here. |
+| `docs/DESIGN.md` | Design decisions, how the engine is pinned, and what is known about it. |
+| `docs/guides/` | How-tos (construction planes). |
 | `docs/releases/` | Release notes for every version, with what was and was not tested. |
 | `docs/WINDOWS.md` | The Windows guide that goes into the zip. |
 | `docs/MCP.md` | Connecting Claude or OpenAI to Forge. |
-| `docs/evaluation/` | Why SolidCraft's engine, and what was tried instead. |
 | `e2e/README.md` | The browser checks. |
 | `CLAUDE.md`, `AGENTS.md` | Notes for the AI assistants that work on the code. |
 
 ## Not here yet
 
-Assemblies and joints, sheet metal, CAM, rendering and simulation (not planned); More import formats (FreeCAD, Rhino); dragging for fillet radius and hole position; Mesh to Solid for sculpted or uneven shapes; a Start menu entry and code signing for the Windows package; Update now on Linux; a package for macOS and for ARM computers such as the Raspberry Pi (it runs from source on both).
+Assemblies and components, sheet metal, CAM, rendering and simulation (not planned); Project / Intersect (sketching from a body's edges); a one-click installed app that starts the server itself; More import formats (FreeCAD, Rhino); dragging for fillet radius and hole position; Mesh to Solid for sculpted or uneven shapes; a Start menu entry and code signing for the Windows package; Update now on Linux; a package for macOS and for ARM computers such as the Raspberry Pi (it runs from source on both).
 
 ## Licence
 

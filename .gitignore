@@ -7,3 +7,14 @@ data/
 docs/private/
 dist-windows/
 dist-linux/
+# nothing from working sessions belongs in the public repository
+.claude/
+.cursor/
+.codex/
+.aider*
+.github/copilot-instructions.md
+GEMINI.md
+scratch/
+notes/
+*.private.md
+*.transcript*

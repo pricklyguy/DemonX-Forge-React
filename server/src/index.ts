@@ -25,7 +25,7 @@ if (process.env.FORGE_LAUNCHER) refreshStartFiles(home, root, (m) => console.log
 let engine: Engine | undefined;
 let engineProblem = '';
 async function startEngine() {
-  if (!existsSync(ENGINE_PATH)) { engineProblem = `The modelling engine was not found at ${ENGINE_PATH}. See docs/PLAN.md ("Engine hand-over").`; return; }
+  if (!existsSync(ENGINE_PATH)) { engineProblem = `The modelling engine was not found at ${ENGINE_PATH}. See docs/DESIGN.md ("The engine, and how it is pinned").`; return; }
   const e = new SolidCraftEngine(ENGINE_PATH, undefined, appVersion);
   try { await e.start(); engine = e; } catch (err) { engineProblem = String((err as Error).message); }
 }
