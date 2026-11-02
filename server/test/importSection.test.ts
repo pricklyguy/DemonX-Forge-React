@@ -36,7 +36,7 @@ describe.skipIf(!existsSync(bin))('STEP import and section DXF (real engine)', (
     const before = await e.snapshot();
     const dxf = Buffer.from(await e.exportSectionDxf({ plane: 'XZ', offset: 15, body: 'Body1' })).toString('utf8');
     const ls = lines(dxf);
-    expect(ls).toHaveLength(6); // two U shapes: the plate either side of the 8 mm hole
+    expect(ls).toHaveLength(8); // two closed rectangles of four lines: the plate either side of the 8 mm hole (SolidCraft 0.19 left out the side that meets the hole: six lines)
     const ys = ls.flatMap((l) => l.y); expect(Math.min(...ys)).toBeCloseTo(0, 3); expect(Math.max(...ys)).toBeCloseTo(10, 3); // 10 mm thick, standing up (not hanging down)
     const after = await e.snapshot();
     expect(after.sketches.map((s) => s.name)).toEqual(before.sketches.map((s) => s.name));
