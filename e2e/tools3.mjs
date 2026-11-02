@@ -21,7 +21,7 @@ const text = (id) => p.getByTestId(id).innerText();
 const state = () => p.evaluate(async () => (await fetch('/api/state')).json());
 const api = (steps) => p.evaluate(async (steps) => { const r = await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); return r.ok; }, steps);
 const waitTrue = async (f, n = 60) => { for (let i = 0; i < n; i++) { if (await f()) return true; await settle(250); } return false; };
-const boxes = () => p.evaluate(async () => (await (await fetch('/api/state')).json()).bodies.map((b) => { const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9]; for (let i = 0; i < b.positions.length; i++) { lo[i % 3] = Math.min(lo[i % 3], b.positions[i]); hi[i % 3] = Math.max(hi[i % 3], b.positions[i]); } return [...lo, ...hi].map((v) => Math.round(v)).join(','); }).sort());
+const boxes = () => p.evaluate(() => window.__forge.viewBoxes().sort()); // (what is drawn: a Move is previewed in the view, and the engine changes at OK)
 const same = async (list) => JSON.stringify(await boxes()) === JSON.stringify(list);
 const faces = async () => (await state()).bodies[0]?.faces.length ?? 0;
 const reload = async () => { await p.reload(); await ready(p); await p.getByTestId('timeline').waitFor({ timeout: 30000 }); await settle(1000); };

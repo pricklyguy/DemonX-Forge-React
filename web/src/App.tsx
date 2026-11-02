@@ -1,5 +1,6 @@
 import { useInstall } from './install';
 import type { TriadSpec } from './triad';
+import { moveMatrix } from './moveMath';
 import { chainOrder } from './chain';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildEdgeGeometry } from '../../server/src/engine/meshEdges';
@@ -40,6 +41,8 @@ const initialBodies = (t: ModTool, names: string[], picked: string | undefined):
   if (t === 'combine') return names.length === 2 ? [names[1]!] : picked && picked !== names[0] ? [picked] : [];
   return names.length === 1 ? [names[0]!] : picked ? [picked] : [];
 };
+/** Bodies chosen whole in the model view (click in the browser, double-click, or a drag box) are the ones a body tool starts on. */
+const chosenBodies = (t: ModTool, names: string[], whole: string[], picked: string | undefined): string[] => { const w = whole.filter((n) => names.includes(n)); return BODY_TOOLS.includes(t) && t !== 'meshconv' && t !== 'combine' && t !== 'split' && w.length ? w : initialBodies(t, names, picked); };
 const holePos = (p: readonly number[]) => ({ x: String(+p[0]!.toFixed(2)), y: String(+p[1]!.toFixed(2)), z: String(+p[2]!.toFixed(2)) });
 const MOD_TITLE: Record<ModTool, string> = { fillet: 'FILLET', chamfer: 'CHAMFER', shell: 'SHELL', presspull: 'PRESS PULL', offsetface: 'OFFSET FACE', draft: 'DRAFT', hole: 'HOLE', thread: 'THREAD', mirror: 'MIRROR', rpattern: 'RECTANGULAR PATTERN', cpattern: 'CIRCULAR PATTERN', combine: 'COMBINE', move: 'MOVE / COPY', split: 'SPLIT BODY', scale: 'SCALE', coil: 'COIL', meshconv: 'MESH TO SOLID', box: 'BOX', cylinder: 'CYLINDER', sphere: 'SPHERE', torus: 'TORUS', planeOffset: 'OFFSET PLANE', planeAngle: 'PLANE AT ANGLE', planeMid: 'MIDPLANE' };
 const HINT: Record<string, string> = {
@@ -293,6 +296,7 @@ export function App() {
   const [snap, setSnap] = useState<Snapshot>(EMPTY);
   const [mode, setMode] = useState<Mode>('model');
   /** Sketch Move / Copy while its box is open: the curves, the middle they turn about, and the typed move (arrows in the view set dx and dy). */
+  const [skStep, setSkStep] = useState('10');
   const [skMove, setSkMove] = useState<{ ents: string[]; ctr: Vec2; dx: string; dy: string; angle: string; copy: boolean } | null>(null);
   const [tool, setTool] = useState<Tool | null>(null);
   const [pending, setPending] = useState<Vec2[]>([]);
@@ -805,11 +809,18 @@ export function App() {
     return Number.isFinite(lo[0]!) ? [(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2] : null;
   };
   /** While a Move (not a copy) is previewed, the bodies' first places show as an outline so it is clear what moved from where. */
+  const moveChanged = [bf.mx, bf.my, bf.mz].some((v) => Number(v) !== 0 && v.trim() !== '') || (bf.rotAxis !== 'none' && Number(bf.rotAngle) !== 0);
   const moveGhost = useMemo(() => {
-    if (mode !== 'modify' || modTool !== 'move' || bf.copy || !modBase) return undefined;
-    const changed = [bf.mx, bf.my, bf.mz].some((v) => Number(v) !== 0 && v.trim() !== '') || (bf.rotAxis !== 'none' && Number(bf.rotAngle) !== 0);
-    return changed ? modBase.bodies.filter((b) => bodiesSel.includes(b.name)) : undefined;
-  }, [mode, modTool, bf.copy, bf.mx, bf.my, bf.mz, bf.rotAxis, bf.rotAngle, modBase, bodiesSel]);
+    if (mode !== 'modify' || modTool !== 'move' || bf.copy || !modBase || !moveChanged || valueEdit) return undefined;
+    return modBase.bodies.filter((b) => bodiesSel.includes(b.name));
+  }, [mode, modTool, bf.copy, moveChanged, modBase, bodiesSel, valueEdit]); // (not on every number: the view rebuilds when this changes)
+  /** Move's live preview is drawn in the view under a matrix: no engine call while you drag, one when you press OK. */
+  const movePreview = useMemo(() => {
+    if (mode !== 'modify' || modTool !== 'move' || valueEdit || !bodiesSel.length) return null;
+    const c = moveCentre(); if (!c || !moveChanged) return null;
+    const turn = bf.rotAxis !== 'none' ? Number(bf.rotAngle) || 0 : 0;
+    return { names: bodiesSel, matrix: moveMatrix(c, [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0], turn ? AXIS_VEC[bf.rotAxis]! : null, turn), copy: bf.copy };
+  }, [mode, modTool, valueEdit, bodiesSel, modBase, moveChanged, bf.mx, bf.my, bf.mz, bf.rotAxis, bf.rotAngle, bf.copy]); // eslint-disable-line react-hooks/exhaustive-deps
   const moveTriad = useMemo((): TriadSpec | null => {
     if (mode !== 'modify' || modTool !== 'move' || valueEdit || !bodiesSel.length) return null;
     const c = moveCentre(); if (!c) return null;
@@ -1030,10 +1041,11 @@ export function App() {
   useEffect(() => {
     if (mode !== 'extrude' && mode !== 'modify') return;
     if (skipFirst.current) { skipFirst.current = false; baseKey.current = stepKey; return; }
+    if (mode === 'modify' && modTool === 'move' && !valueEdit) return; // Move previews in the view, with no engine call, until OK
     const t = setTimeout(() => { void applyPreview(JSON.parse(stepKey)); }, 250);
     previewTimer.current = t;
     return () => clearTimeout(t);
-  }, [mode, stepKey, applyPreview]);
+  }, [mode, stepKey, applyPreview, modTool, valueEdit]);
 
   const startExtrude = async (kind: ExtKind = 'extrude') => {
     if (mode === 'extrude') {
@@ -1115,7 +1127,7 @@ export function App() {
     if (t === 'meshconv' && !s.bodies.some((b) => b.mesh)) { setError('There is no mesh to convert: File > Import STEP / IGES / STL… brings one in.'); return; }
     if (!s.bodies.length && t !== 'coil' && !PRIM_TOOLS.includes(t) && !PLANE_TOOLS.includes(t)) { setError('Make a body first (sketch and extrude), then change it.'); return; } // a coil can be the first body
     const start = FACE_TOOLS.includes(t) ? sel : null; // a face that is already selected is the one to work on
-    setBodiesSel(initialBodies(t, s.bodies.filter((b) => t !== 'meshconv' || b.mesh).map((b) => b.name), sel?.body)); // a face that is already selected is the one to push or pull
+    setBodiesSel(chosenBodies(t, s.bodies.filter((b) => t !== 'meshconv' || b.mesh).map((b) => b.name), bodySel, sel?.body)); // bodies chosen whole, or a face that is already selected, are the ones to work on
     chooseTool(null); setSel(null); if (!isEdgeTool(t) || activeSketch) setEdgesSel([]); setFacesSel(start ? [start] : []); setHoleEdit(null); setCf({ ...COIL_FORM, op: s.bodies.length ? 'join' : 'new' }); setPf({ ...PRIM_FORM, op: s.bodies.length && t !== 'torus' ? 'join' : 'new' }); setPlf({ ...PLANE_FORM, value: t === 'planeAngle' ? '45' : '10' }); setHf({ ...HOLE_FORM, ...(t === 'hole' && start ? holePos(start.point) : {}) }); setTf({ designation: '', length: '', modeled: false }); setModTool(t); setModBase(s); setModValue(MOD_DEFAULT[t]); setMode('modify'); setError('');
   };
   useEffect(() => { if (mode === 'model') setEdgesSel((cur) => (cur.length ? [] : cur)); }, [snap.bodies]); // picked edges belong to the body as it was
@@ -1298,6 +1310,17 @@ export function App() {
     if (mode !== 'model') return;
     setSel(null); setEdgesSel([]); setSelected([]);
     setBodySel2((cur) => (additive ? (cur.includes(name) ? cur.filter((n) => n !== name) : [...cur, name]) : [name]));
+  };
+  /** A drag over empty space in the model view takes bodies: selected in the model view, or added to the pick of a body tool (Move, Mirror and so on). */
+  const bodyBoxOn = (mode === 'model' && !measure) || (mode === 'modify' && BODY_TOOLS.includes(modTool) && !valueEdit);
+  const bodyBox = (names: string[], additive: boolean) => {
+    if (mode === 'modify') {
+      const only = modTool === 'split' || modTool === 'meshconv', ok = names.filter((n) => modBase?.bodies.some((b) => b.name === n && (modTool !== 'meshconv' || b.mesh)));
+      if (!ok.length) return;
+      setBodiesSel((cur) => (only ? [ok[0]!] : additive || cur.length ? [...new Set([...cur, ...ok])] : ok)); setError(''); return;
+    }
+    setSel(null); setSelMore(null); setEdgesSel([]); setSelected([]);
+    setBodySel2((cur) => (additive ? [...new Set([...cur, ...names])] : names));
   };
   useEffect(() => { setBodySel2((cur) => { const keep = cur.filter((n) => snap.bodies.some((b) => b.name === n)); return keep.length === cur.length ? cur : keep; }); }, [snap.bodies]);
   const renameBody = async (from: string, to: string) => {
@@ -1653,7 +1676,7 @@ export function App() {
         <Viewport bodies={snap.bodies} sketches={snap.sketches} activeSketch={activeSketch} theme={theme} mode={mode} tool={tool} pending={pending}
           hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} constPlanes={snap.planes} hiddenPlanes={hiddenPlanes} planeSheets={planeSheets} hoverPlane={hoverPlane} showGrid={showGrid} showAxes={showAxes} showDims={showDims} onDimEdit={dimEdited} showEdges={showEdges} showProfiles={showProfiles} snap={snapOn}
           selectedFaces={mode === 'modify' ? facesSel : measure ? measure.flatMap((m) => (m.kind === 'face' ? [{ body: m.body, face: m.face }] : [])) : [...(selMore ? [selMore] : []), ...(sel ? [sel] : [])]} pickFaces={mode === 'modify' && (FACE_TOOLS.includes(modTool) || BODY_TOOLS.includes(modTool) || PRIM_TOOLS.includes(modTool) || PLANE_TOOLS.includes(modTool))} selectedBodies={mode === 'modify' ? bodiesSel : mode === 'model' ? bodySel : []} onBodyPick={selectBody} selectedProfiles={profiles}
-          handle={dragHandle} triad={skMoveTriad ?? moveTriad} ghost={moveGhost} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setProfiles([]); if (f?.additive && sel) { setSelMore(sel); setSel(f); return; } setSelMore(null); setSel(f); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={skMove ? skMoveOutline : offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
+          handle={dragHandle} triad={skMoveTriad ?? moveTriad} ghost={moveGhost} movePreview={movePreview} onBodyBox={bodyBoxOn ? bodyBox : undefined} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setProfiles([]); if (f?.additive && sel) { setSelMore(sel); setSel(f); return; } setSelMore(null); setSel(f); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={skMove ? skMoveOutline : offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
           pickMode={mode !== 'sketch' ? null : !tool ? 'curve' : isDraw(tool) ? null : PICK_MODE[tool]} highlight={[...selected, ...picks.map((q) => q.id), ...(offsetPick ? [offsetPick] : [])]} showPoints={mode === 'sketch' && !!tool && !isDraw(tool) && PICK_MODE[tool] !== 'curve'}
           onProfilePick={profilePicked} onFaceSnap={faceSnap} onCursor={setCursor} apiRef={viewApi} />
 
@@ -1817,14 +1840,22 @@ export function App() {
           </div>
         )}
         {skMove && (
-          <div className="entry skmove" data-testid="skmove-dialog">
-            <b>Move / Copy</b>
-            {([['dx', 'X', 'mm'], ['dy', 'Y', 'mm'], ['angle', 'Turn', '°']] as const).map(([key, lab, unit], i) => (
-              <label key={key}>{lab}<input autoFocus={i === 0} aria-label={`Move ${key}`} data-testid={`skmove-${key}`} type="text" value={skMove[key]} onFocus={(e) => e.target.select()}
-                onChange={(e) => setSkMove({ ...skMove, [key]: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') okSketchMove(); }} />{unit}</label>
-            ))}
-            <label><input type="checkbox" data-testid="skmove-copy" checked={skMove.copy} onChange={(e) => setSkMove({ ...skMove, copy: e.target.checked })} />Copy</label>
-            <button onClick={() => setSkMove(null)}>Cancel</button><button className="primary" data-testid="skmove-ok" onClick={okSketchMove}>OK</button>
+          <div className="dialog compact" data-testid="skmove-dialog">
+            <div className="dhead">MOVE / COPY</div>
+            <div className="drow"><span>Curves</span><b>{skMove.ents.length} selected</b></div>
+            <label className="drow"><span>Step</span><select aria-label="Move step" value={skStep} onChange={(e) => setSkStep(e.target.value)}>{['0.1', '1', '5', '10', '25', '100'].map((v) => <option key={v} value={v}>{v} mm</option>)}</select></label>
+            {([['dx', 'X', AXIS_COLOR.mx, 1], ['dy', 'Y', AXIS_COLOR.my, 1], ['angle', 'Turn', AXIS_COLOR.mz, 15]] as const).map(([key, lab, colour, mult], i) => {
+              const st = (Number(skStep) || 1) * (mult === 15 ? 1.5 : 1), nudge = (v: number) => String(+((Number(skMove[key]) || 0) + v).toFixed(4));
+              return (
+                <div className="drow axis" key={key}><span style={{ color: colour }}>{lab}</span>
+                  <div className="stepper"><button type="button" aria-label={`${lab} minus`} onClick={() => setSkMove({ ...skMove, [key]: nudge(-(mult === 15 ? 15 : st)) })}>−</button>
+                    <input autoFocus={i === 0} aria-label={`Move ${key}`} data-testid={`skmove-${key}`} type="text" value={skMove[key]} onFocus={(e) => e.target.select()} onChange={(e) => setSkMove({ ...skMove, [key]: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') okSketchMove(); }} />
+                    <button type="button" aria-label={`${lab} plus`} onClick={() => setSkMove({ ...skMove, [key]: nudge(mult === 15 ? 15 : st) })}>+</button></div></div>
+              );
+            })}
+            <label className="drow"><span>Copy</span><input type="checkbox" aria-label="Copy" data-testid="skmove-copy" checked={skMove.copy} onChange={(e) => setSkMove({ ...skMove, copy: e.target.checked })} /></label>
+            <div className="dnote">Drag the arrows, squares, centre dot or turn handle on the selection, or type or step the numbers (mm and degrees). The result is shown before you press OK.</div>
+            <div className="dbtns"><button onClick={() => setSkMove(null)}>Cancel</button><button className="primary" data-testid="skmove-ok" onClick={okSketchMove}>OK</button></div>
           </div>
         )}
         {edit && (

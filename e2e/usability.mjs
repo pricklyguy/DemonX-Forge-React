@@ -21,7 +21,7 @@ const at = (q) => p.evaluate((q) => window.__forge.sketchToScreen(q), q);
 const text = (id) => p.getByTestId(id).innerText();
 const state = () => p.evaluate(async () => (await fetch('/api/state')).json());
 const waitTrue = async (f) => { for (let i = 0; i < 60; i++) { if (await f()) return true; await settle(250); } return false; };
-const boxes = async () => (await state()).bodies.map((b) => { const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9]; for (let i = 0; i < b.positions.length; i++) { const k = i % 3; lo[k] = Math.min(lo[k], b.positions[i]); hi[k] = Math.max(hi[k], b.positions[i]); } return [...lo, ...hi].map((v) => Math.round(v * 10) / 10).join(','); });
+const boxes = () => p.evaluate(() => window.__forge.viewBoxes()); // (what is drawn: a Move is previewed in the view, and the engine changes at OK)
 const api = (steps) => p.evaluate(async (steps) => { const r = await fetch('/api/batch', { method: 'POST', body: JSON.stringify({ steps }) }); return r.ok; }, steps);
 
 await p.goto(URL);

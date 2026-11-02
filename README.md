@@ -21,6 +21,7 @@ It shares the look and feel of DemonX CNC and DemonX Design (the same slate and 
 - Create: **Box, Cylinder, Sphere and Torus**, Extrude (E, with a live preview and a drag arrow), Revolve, Sweep, Loft, Rib, Pipe, Coil, Emboss, Mirror, Rectangular and Circular Pattern, Hole (simple, counterbore, countersink; H).
 - Modify: Fillet (F), Chamfer, Press Pull (Q; E on a selected face does the same), Shell, Offset Face, Draft, Combine (join, cut, intersect), Move / Copy (M, with a gizmo of arrows, plane squares, a centre dot and turning rings, a step selector and turns), Split Body, Scale, Thread, Mesh to Solid.
 - Pick the edges first and then press F (or Fillet), as in Fusion, or press the key first; type the number right after it. Measure (INSPECT tab, I) gives distances, angles, lengths and diameters between points, edges and faces.
+- Drag a box over empty space in the model view to select bodies (left to right: wholly inside; right to left: touched; Shift adds).
 - The bar along the bottom measures what is selected: a face's area, an edge's length, and with Shift or Ctrl a second pick gives the distance and angle between the two.
 - Select a face and press the key, or right-click anything for a menu of what applies. Every command is also on the ribbon, which wraps to a second row in a narrow window.
 
@@ -107,7 +108,7 @@ A Node server runs a modelling engine as a hidden process (today SolidCraft's he
 
 ## Not here yet
 
-Assemblies and components, sheet metal, CAM, rendering and simulation (not planned); Project / Intersect (sketching from a body's edges); a one-click installed app that starts the server itself; More import formats (FreeCAD, Rhino); dragging for fillet radius and hole position; Mesh to Solid for sculpted or uneven shapes; a Start menu entry and code signing for the Windows package; Update now on Linux; a package for macOS and for ARM computers such as the Raspberry Pi (it runs from source on both).
+Assemblies and components, sheet metal, CAM, rendering and simulation (not planned); Project / Intersect (sketching from a body's edges); a one-click installed app that starts the server itself; More import formats (FreeCAD, Rhino); dragging for fillet radius and hole position; rotating a sketch's plane; Mesh to Solid for sculpted or uneven shapes; a Start menu entry and code signing for the Windows package; Update now on Linux; a package for macOS and for ARM computers such as the Raspberry Pi (it runs from source on both).
 
 ## Licence
 

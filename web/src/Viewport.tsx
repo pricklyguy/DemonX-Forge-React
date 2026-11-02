@@ -67,6 +67,10 @@ interface Props {
   triad?: TriadSpec | null;
   /** Where bodies were before a Move, drawn as a faint outline while the moved result is previewed (the original stays visible in place). */
   ghost?: Body[];
+  /** Move's live preview, done in the view with no engine call: the bodies are drawn under this matrix (column-major), or, for a copy, a moved copy is drawn beside the original. */
+  movePreview?: { names: string[]; matrix: number[]; copy: boolean } | null;
+  /** A left drag over empty space in the model view: the bodies it takes (window: wholly inside; crossing, dragged right to left: touched), and whether Shift or Ctrl was held. Off (undefined) where a drag should do nothing. */
+  onBodyBox?(names: string[], additive: boolean): void;
   onEdgePick(ref: EdgeRef | null, additive: boolean): void;
   /** The Measure tool is open: a click picks a vertex, an edge or a face (in that order of preference) and is reported here instead of selecting. */
   measuring?: boolean;
@@ -127,7 +131,7 @@ export function Viewport(props: Props) {
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(200, -300, 400); scene.add(sun);
     const gBodies = new THREE.Group(), gSketch = new THREE.Group(), gPlanes = new THREE.Group(), gGrid = new THREE.Group(), gPreview = new THREE.Group(), gEdges = new THREE.Group(), gHandle = new THREE.Group();
-    const gGhost = new THREE.Group(); scene.add(gGhost);
+    const gGhost = new THREE.Group(), gMove = new THREE.Group(); scene.add(gGhost, gMove);
     scene.add(gBodies, gSketch, gPlanes, gGrid, gPreview, gEdges, gHandle);
     const lineMats = new Set<LineMaterial>();
     // dimension values drawn as small labels over the sketch (plain HTML, moved to follow the camera every frame)
@@ -194,6 +198,19 @@ export function Viewport(props: Props) {
 
     // ---- bodies
     let lit: { body: string; face: number } | null = null; // the face lit while a sketch plane is being chosen
+    /** Move's preview: bodies drawn under the matrix (or, for a copy, a moved copy), without touching the engine. */
+    const applyMovePreview = () => {
+      for (const c of [...gMove.children]) gMove.remove(c); // (the copies share the originals' geometry, so nothing is disposed here)
+      const mp = P.current.movePreview;
+      for (const m of gBodies.children as THREE.Mesh[]) {
+        const body = m.userData.body as Body | undefined;
+        if (mp && body && mp.names.includes(body.name)) {
+          if (mp.copy) { const cp = new THREE.Mesh(m.geometry, m.material); for (const ch of m.children) cp.add(ch.clone()); cp.matrixAutoUpdate = false; cp.matrix.fromArray(mp.matrix); gMove.add(cp); }
+          else { m.matrixAutoUpdate = false; m.matrix.fromArray(mp.matrix); continue; }
+        }
+        m.matrixAutoUpdate = true; m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1);
+      }
+    };
     const rebuildBodies = () => {
       scene.background = new THREE.Color(css('--canvas'));
       clear(gBodies); clear(gGhost); lit = null;
@@ -218,6 +235,7 @@ export function Viewport(props: Props) {
         m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), new THREE.LineBasicMaterial({ color: css('--accent'), transparent: true, opacity: 0.55, depthWrite: false })));
         gGhost.add(m);
       }
+      applyMovePreview();
     };
 
     // ---- sketches: curves, and filled regions while sketching or choosing what to extrude
@@ -667,7 +685,31 @@ export function Viewport(props: Props) {
     let down: [number, number] | null = null;
     let drawFrom: Vec2 | null = null; // where a drag with a drawing tool began
     let band: { from: Vec2; at: [number, number]; el: HTMLDivElement | null } | null = null; // the rubber band of a drag over empty space
-    const endBand = () => { band?.el?.remove(); band = null; };
+    const endBand = () => { band?.el?.remove(); band = null; bband?.el?.remove(); bband = null; };
+    let bband: { at: [number, number]; el: HTMLDivElement | null } | null = null; // a drag over empty space in the model view: the bodies it takes are selected
+    /** The bodies a screen rectangle takes: wholly inside it (window), or touched by it (crossing). */
+    const bodiesInRect = (x0: number, y0: number, x1: number, y1: number, crossing: boolean): string[] => {
+      const r = dom.getBoundingClientRect(), lx = Math.min(x0, x1) - r.left, hx = Math.max(x0, x1) - r.left, ly = Math.min(y0, y1) - r.top, hy = Math.max(y0, y1) - r.top;
+      const q = new THREE.Vector3(), out: string[] = [];
+      for (const m of gBodies.children as THREE.Mesh[]) {
+        const body = m.userData.body as Body | undefined; if (!body || P.current.hiddenBodies.has(body.name)) continue;
+        const pos = m.geometry.getAttribute('position'), step = Math.max(1, Math.floor(pos.count / 4000)); // (a sample of the corners is enough, and keeps a big part quick)
+        let inside = 0, any = 0, total = 0, front = true;
+        for (let i = 0; i < pos.count; i += step) {
+          q.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld).project(cam); total++;
+          if (q.z > 1) { front = false; continue; }
+          const px = ((q.x + 1) / 2) * size.x, py = ((1 - q.y) / 2) * size.y;
+          if (px >= lx && px <= hx && py >= ly && py <= hy) { inside++; any++; }
+        }
+        if (!total || !front) continue;
+        if (crossing ? any > 0 : inside === total) { out.push(body.name); continue; }
+        if (crossing) { // the rectangle may sit inside the body's outline with none of its corners in it: look through the middle of it
+          const mx = (lx + hx) / 2, my = (ly + hy) / 2; setRay({ clientX: mx + r.left, clientY: my + r.top });
+          if (ray.intersectObjects([m], false).length) out.push(body.name);
+        }
+      }
+      return out;
+    };
     let entDrag: { ent: Picked; from: Vec2; at: [number, number]; started: boolean; last: Vec2 } | null = null; // a point or curve being dragged in a sketch
     dom.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
@@ -678,6 +720,7 @@ export function Viewport(props: Props) {
       if (q.mode === 'sketch' && !q.tool && q.activeSketch && q.onEntityDrag) { const raw = rawPoint(e); const ent = raw ? pickEntity(q.activeSketch, raw, wpp() * 9, 'any') : null; if (ent && raw) entDrag = { ent, from: raw, at: [e.clientX, e.clientY], started: false, last: raw }; }
       drawFrom = q.mode === 'sketch' && isDraw(q.tool) && q.pending.length === 0 ? sketchPoint(e) : null;
       endBand();
+      if (q.onBodyBox && (q.mode === 'model' || q.mode === 'modify')) bband = { at: [e.clientX, e.clientY], el: null };
       if (q.mode === 'sketch' && !q.tool && !entDrag && q.activeSketch && q.onSketchBox) { const raw = rawPoint(e); if (raw) band = { from: raw, at: [e.clientX, e.clientY], el: null }; }
     });
     // the shape under the pointer lights up (model view and Extrude), so it is clear what can be clicked
@@ -705,6 +748,14 @@ export function Viewport(props: Props) {
         const x0 = band.at[0] - r.left, y0 = band.at[1] - r.top, x1 = e.clientX - r.left, y1 = e.clientY - r.top;
         Object.assign(band.el.style, { left: `${Math.min(x0, x1)}px`, top: `${Math.min(y0, y1)}px`, width: `${Math.abs(x1 - x0)}px`, height: `${Math.abs(y1 - y0)}px` });
         band.el.classList.toggle('crossing', x1 < x0); // right to left touches, left to right needs the whole curve inside
+        return;
+      }
+      if (bband && (bband.el || Math.hypot(e.clientX - bband.at[0], e.clientY - bband.at[1]) > 4)) {
+        const r = dom.getBoundingClientRect();
+        if (!bband.el) { bband.el = document.createElement('div'); bband.el.className = 'rubberband'; bband.el.setAttribute('data-testid', 'rubberband'); liveLayer.appendChild(bband.el); dom.setPointerCapture(e.pointerId); }
+        const x0 = bband.at[0] - r.left, y0 = bband.at[1] - r.top, x1 = e.clientX - r.left, y1 = e.clientY - r.top;
+        Object.assign(bband.el.style, { left: `${Math.min(x0, x1)}px`, top: `${Math.min(y0, y1)}px`, width: `${Math.abs(x1 - x0)}px`, height: `${Math.abs(y1 - y0)}px` });
+        bband.el.classList.toggle('crossing', x1 < x0);
         return;
       }
       if (entDrag && (entDrag.started || Math.hypot(e.clientX - entDrag.at[0], e.clientY - entDrag.at[1]) > 4)) {
@@ -752,6 +803,12 @@ export function Viewport(props: Props) {
         const to = rawPoint(e), crossing = e.clientX < band.at[0], from = band.from, additive = e.shiftKey || e.ctrlKey || e.metaKey;
         endBand(); down = null; drawFrom = null; try { dom.releasePointerCapture(e.pointerId); } catch { /* already released */ }
         if (to) P.current.onSketchBox?.(from, to, crossing, additive);
+        return;
+      }
+      if (bband?.el) {
+        const x0 = bband.at[0], y0 = bband.at[1], crossing = e.clientX < x0, additive = e.shiftKey || e.ctrlKey || e.metaKey, names = bodiesInRect(x0, y0, e.clientX, e.clientY, crossing);
+        endBand(); down = null; try { dom.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+        if (names.length) P.current.onBodyBox?.(names, additive); // (a drag that takes nothing leaves the selection as it was)
         return;
       }
       endBand();
@@ -992,6 +1049,8 @@ export function Viewport(props: Props) {
       orbit,
       litFace: () => lit,
       up: () => cam.up.toArray(),
+      // for the browser checks: the box of every body as drawn (a Move's preview included), 'x0,y0,z0,x1,y1,z1' rounded to the millimetre
+      viewBoxes: () => [...gBodies.children, ...gMove.children].map((o) => { o.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(o); return [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].map((v) => Math.round(v)).join(','); }),
       project: (w: number[]) => { const v = new THREE.Vector3(w[0], w[1], w[2]).project(cam); const r = dom.getBoundingClientRect(); return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height]; },
       sketchToScreen: (q: Vec2) => { const s = P.current.activeSketch; if (!s) return null; const w = toWorld(planeOf(s), q); return (window as any).__forge.project(w); },
       pointerSnap: () => cursor,
@@ -1004,6 +1063,7 @@ export function Viewport(props: Props) {
       // test hook: what the edge picker finds at the screen position of a world point
       edgeAt: (w: number[]) => { const [x, y] = (window as any).__forge.project(w); const sets = P.current.edgeSets; return { sets: sets.length, edges: sets.reduce((n, t) => n + t.edges.length, 0), pick: pickEdge({ clientX: x, clientY: y }), mode: P.current.mode }; },
     };
+    (S.current as any).applyMovePreview = applyMovePreview;
     const fitOnce = () => { if (!firstFit && gBodies.children.length) { firstFit = true; fit(); } };
     (S.current as any).fitOnce = fitOnce;
     return () => { cancelAnimationFrame(raf); ro.disconnect(); ctl.dispose(); renderer.dispose(); el.removeChild(dom); S.current = null; endBand(); labelLayer.remove(); planeLayer.remove(); triadSvg.remove(); window.removeEventListener('pointermove', moveTriad); window.removeEventListener('pointerup', endTriad); delete (window as any).__forgeTriad; handleInputs.forEach((x) => x.remove()); liveInputs.length = 0; liveLayer.remove(); delete (window as any).__forge; };
@@ -1015,6 +1075,7 @@ export function Viewport(props: Props) {
   useEffect(() => { S.current?.rebuild('planes'); }, [p.mode, p.showOrigin, p.bodies, p.theme, p.constPlanes, p.hiddenPlanes, p.planeSheets, p.hoverPlane]);
   useEffect(() => { S.current?.rebuild('preview'); }, [p.pending, p.tool, p.mode, p.activeSketch, p.pickMode, p.highlight, p.showPoints, p.extraPreview, p.sizes?.join('|')]);
   useEffect(() => { S.current?.rebuild('camera'); }, [p.mode, p.activeSketch?.id]);
+  useEffect(() => { (S.current as any)?.applyMovePreview?.(); }, [p.movePreview]);
   useEffect(() => { S.current?.rebuild('handle'); }, [p.handle?.origin.join(), p.handle?.dir.join(), p.handle?.value, p.handles?.map((h) => `${h.origin.join()}|${h.dir.join()}|${h.value}|${h.base}|${h.fixed}`).join(';'), p.theme]);
   useEffect(() => { S.current?.rebuild('edges'); }, [p.mode, p.edgeSets, p.edgeHighlight, p.markers, p.theme]);
 
