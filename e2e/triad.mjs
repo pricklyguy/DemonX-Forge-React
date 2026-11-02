@@ -52,7 +52,7 @@ await drag(t.o, [t.o[0] + pxX[0] * -6 + pxY[0] * 3, t.o[1] + pxX[1] * -6 + pxY[1
 check(Math.abs(await val('skmove-dx') + 6) <= 1 && Math.abs(await val('skmove-dy') - 3) <= 1, 'the centre dot drags in the plane', `${await val('skmove-dx')}, ${await val('skmove-dy')}`);
 await p.getByTestId('skmove-dx').fill('0'); await p.getByTestId('skmove-dy').fill('0'); await settle(600);
 // the ring: a quarter turn anticlockwise on the screen is +90
-t = await tri(); const d0 = t.ringAt[0][0], c = t.o, v = [d0[0] - c[0], d0[1] - c[1]];
+t = await tri(); const d0 = t.ringAt[0], c = t.o, v = [d0[0] - c[0], d0[1] - c[1]];
 await drag(d0, [c[0] + v[1], c[1] - v[0]]);
 check(Math.abs(await val('skmove-angle') - 90) <= 15, 'the ring turns it: a quarter turn anticlockwise is about +90', `${await val('skmove-angle')}`);
 console.log('   box:', await val('skmove-dx'), await val('skmove-dy'), await val('skmove-angle'));
@@ -78,6 +78,24 @@ await p.getByLabel('Move Z', { exact: true }).fill('0'); await settle(300);
 t = await tri(); const sq2 = t.planeAt.XY;
 await drag(sq2, [sq2[0] + pxX3[0] * 6, sq2[1] + pxX3[1] * 6]);
 check(Math.abs(Number(await p.getByLabel('Move X', { exact: true }).inputValue())) >= 3, 'a square moves it in its plane', await p.getByLabel('Move X', { exact: true }).inputValue());
+await p.getByLabel('Move X', { exact: true }).fill('0'); await settle(400);
+// the turn handles: RZ sits toward +Y, square to Z; drag it a quarter turn anticlockwise (seen from above) about the middle of the body
+t = await tri();
+const rz = t.ringAt[2], oo = t.o, y0 = [t.arrowTip[1][0] - t.o[0], t.arrowTip[1][1] - t.o[1]];
+check(Math.hypot(rz[0] - oo[0], rz[1] - oo[1]) > 40, 'the Z turn handle stands off from the centre', JSON.stringify([rz, oo]));
+{
+  const o3 = await p.evaluate(() => window.__forge.project([20, 15, 5])), py = await p.evaluate(() => window.__forge.project([20, 16, 5])), nx = await p.evaluate(() => window.__forge.project([19, 15, 5]));
+  const ay = [py[0] - o3[0], py[1] - o3[1]], R = Math.hypot(rz[0] - oo[0], rz[1] - oo[1]) / Math.hypot(ay[0], ay[1]);
+  await drag(rz, [o3[0] + R * (nx[0] - o3[0]), o3[1] + R * (nx[1] - o3[1])]); // the handle sits toward +Y: a quarter turn anticlockwise seen from above takes it to -X
+  const ang = Number(await p.getByLabel('Turn angle').inputValue());
+  check(await p.getByLabel('Turn about').inputValue() === 'Z' && Math.abs(ang - 90) <= 15, 'dragging the Z handle round a quarter sets a turn of about 90 about Z', `${await p.getByLabel('Turn about').inputValue()} ${ang}`);
+  t = await tri();
+  const xt = [t.arrowTip[0][0] - t.o[0], t.arrowTip[0][1] - t.o[1]], cosang = (xt[0] * y0[0] + xt[1] * y0[1]) / (Math.hypot(...xt) * Math.hypot(...y0));
+  check(cosang > 0.95, 'the gizmo turns with the body: its X arrow now points where its Y arrow did', cosang.toFixed(2));
+  await p.getByTestId('modify-ok').click(); await settle(1500);
+  const bb = await p.evaluate(async () => { const b = (await (await fetch('/api/state')).json()).bodies[0]; const lo = [1e9, 1e9], hi = [-1e9, -1e9]; for (let i = 0; i < b.positions.length; i += 3) for (let k = 0; k < 2; k++) { lo[k] = Math.min(lo[k], b.positions[i + k]); hi[k] = Math.max(hi[k], b.positions[i + k]); } return [...lo, ...hi].map((q) => Math.round(q)); });
+  check(JSON.stringify(bb) === JSON.stringify([5, -5, 35, 35]), 'OK: the body turned about its own middle (still centred on 20, 15)', JSON.stringify(bb));
+}
 await b.close();
 console.log(failed ? `== triad: ${failed} FAILED` : '== triad: all passed');
 process.exit(failed ? 1 : 0);

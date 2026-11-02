@@ -14,6 +14,10 @@ What is settled about how Forge is built, and what we know about the modelling e
 - **Licence:** GPL-3.0-or-later.
 - **Our file is `.forge`:** a zip holding `forge.json` (format `demonx-forge`, version, app version, engine, time) and `design.solidcraft`, the engine's own container, which keeps the whole history. It is the most faithful round trip the engine has, and the header makes the file ours and checkable.
 
+## Direction: packaging as a desktop app
+
+The DemonX suite is moving from browser-based tools to installed desktop apps built on Electron. Forge and DemonX Design have no need of the network (only the CNC client needs LAN access, which Electron keeps), so how they are packaged is open. Intended shape: an Electron shell that starts the Forge server and the engine itself (no "start the server, then open the browser" steps, no console window), native menus and file dialogs, file associations for `.forge`, and an updater that replaces the present Update now. The server stays loopback-only until it can be reached by IPC instead of a port. Until then Forge runs as a local server with an installable web app window (File > Install Forge as an app).
+
 ## The engine, and how it is pinned
 
 SolidCraft's headless CLI (`tangency-labs/solidcraft`, MIT OR Apache-2.0) does the modelling. Forge does not bundle its source: the Windows and Linux packages are built by GitHub Actions (`.github/workflows/package.yml`), which compiles `solidcraft-cli` from the commit named in `engine/SOLIDCRAFT_REF`, smoke-tests it, and bundles it with the server, the web app, its own Node and the engine's licence files.

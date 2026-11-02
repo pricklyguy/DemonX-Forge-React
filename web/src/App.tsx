@@ -119,6 +119,11 @@ const FACE_TOOLS: ModTool[] = ['presspull', 'shell', 'offsetface', 'draft', 'hol
 const ONE_FACE: ModTool[] = ['presspull', 'hole', 'thread']; // these work on a single face: a new click replaces the pick
 const VALUE_LABEL: Record<ModTool, string> = { fillet: 'Radius', chamfer: 'Distance', presspull: 'Distance', shell: 'Thickness', offsetface: 'Distance', draft: 'Angle', hole: 'Diameter', thread: '', mirror: '', rpattern: '', cpattern: '', combine: '', move: '', split: '', scale: '', coil: '', meshconv: '', box: '', cylinder: '', sphere: '', torus: '', planeOffset: '', planeAngle: '', planeMid: '' };
 const AXIS_VEC: Record<string, [number, number, number]> = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
+/** A vector turned by `deg` degrees about the unit `axis` through the origin (right-handed). */
+const turnVec = (v: Vec3, axis: Vec3, deg: number): Vec3 => {
+  const t = (deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t), kv: Vec3 = [axis[1] * v[2] - axis[2] * v[1], axis[2] * v[0] - axis[0] * v[2], axis[0] * v[1] - axis[1] * v[0]], kd = axis[0] * v[0] + axis[1] * v[1] + axis[2] * v[2];
+  return [v[0] * c + kv[0] * s + axis[0] * kd * (1 - c), v[1] * c + kv[1] * s + axis[1] * kd * (1 - c), v[2] * c + kv[2] * s + axis[2] * kd * (1 - c)];
+};
 /** Mirror, Rectangular Pattern and Circular Pattern work on whole bodies; their settings live here. */
 type BodyForm = { plane: 'XY' | 'XZ' | 'YZ'; combine: boolean; dir1: string; count1: string; spacing1: string; dir2: string; count2: string; spacing2: string; axis: string; count: string; angle: string; neutral: 'XY' | 'XZ' | 'YZ' | 'bottom' | 'top'; target: string; keep: boolean; cop: 'join' | 'cut' | 'intersect'; mx: string; my: string; mz: string; rotAxis: 'none' | 'X' | 'Y' | 'Z'; rotAngle: string; copy: boolean; step: string; splitAxis: 'X' | 'Y' | 'Z'; splitPos: string; scaleFactor: string; scaleUneven: boolean; sx: string; sy: string; sz: string; scaleAbout: 'origin' | 'center'; tol: string };
 /** The Coil dialog. */
@@ -265,7 +270,7 @@ function BodyFields({ tool, bf, setBf, bodies, allBodies, target, onEnter }: { t
           <input aria-label="Turn angle" type="text" value={bf.rotAngle} onChange={(e) => setBf({ ...bf, rotAngle: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') onEnter(); }} />
           <button type="button" aria-label="Angle plus" onClick={() => setBf({ ...bf, rotAngle: String(+((Number(bf.rotAngle) || 0) + 15).toFixed(4)) })}>+</button></div></div>}
       <label className="drow"><span>Copy</span><input aria-label="Copy" type="checkbox" checked={bf.copy} onChange={(e) => setBf({ ...bf, copy: e.target.checked })} /></label>
-      <div className="dnote">Drag the arrows on the body, or type or step the distances (mm). Turns are in 15° steps about a world axis.</div></>}
+      <div className="dnote">Drag the arrows on the body, or type or step the distances (mm). A turn is about the middle of the body, round a world axis.</div></>}
     {tool === 'meshconv' && <>
       {text('Tolerance (mm)', 'tol')}
       <div className="dnote">Rebuilds a closed mesh of a mechanical part as sketches and extrudes (real faces you can fillet, press pull and drill). It works on parts made of flat steps and straight or evenly leaning walls along one main direction (plates, lips, ribs, drafted walls, round and slotted holes, rounded corners), with holes, countersinks and bosses across it. Sculpted shapes, spheres and walls that lean unevenly are refused, and nothing is changed. Ctrl+Z takes it all back at once. A smaller tolerance follows the mesh more closely.</div></>}
@@ -503,12 +508,14 @@ export function App() {
   const triadStart = useRef<number[]>([0, 0, 0]);
   const skMoveTriad = useMemo((): TriadSpec | null => {
     if (!skMove || !activeSketch?.plane) return null;
-    const pl = activeSketch.plane as Plane, [dx, dy] = skMoveNums();
+    const pl = activeSketch.plane as Plane, [dx, dy, ang] = skMoveNums(), t = (ang * Math.PI) / 180, co = Math.cos(t), si = Math.sin(t);
+    const xd: Vec3 = [pl.xDir[0] * co + pl.yDir[0] * si, pl.xDir[1] * co + pl.yDir[1] * si, pl.xDir[2] * co + pl.yDir[2] * si], yd: Vec3 = [-pl.xDir[0] * si + pl.yDir[0] * co, -pl.xDir[1] * si + pl.yDir[1] * co, -pl.xDir[2] * si + pl.yDir[2] * co]; // the gizmo turns with what is being turned
     return {
       origin: toWorld(pl, [skMove.ctr[0] + dx, skMove.ctr[1] + dy]),
-      axes: [{ dir: pl.xDir, color: AXIS_COLOR.mx, label: 'X' }, { dir: pl.yDir, color: AXIS_COLOR.my, label: 'Y' }],
-      rings: [{ dir: normalOf(pl), color: AXIS_COLOR.mz, label: 'Z' }],
-      onMove: (d, phase) => { if (phase === 'start') { triadStart.current = skMoveNums(); return; } if (phase === 'move') setSkMove((m) => (m ? { ...m, dx: String(+(triadStart.current[0]! + d[0]!).toFixed(3)), dy: String(+(triadStart.current[1]! + d[1]!).toFixed(3)) } : m)); },
+      axes: [{ dir: xd, color: AXIS_COLOR.mx, label: 'X' }, { dir: yd, color: AXIS_COLOR.my, label: 'Y' }],
+      rings: [{ dir: normalOf(pl), anchor: yd, color: AXIS_COLOR.mz, label: 'Z' }],
+      // the arrows are the selection's own axes: a move along one is turned back into the sketch's X and Y
+      onMove: (d, phase) => { if (phase === 'start') { triadStart.current = skMoveNums(); return; } if (phase === 'move') { const ux = [co, si], uy = [-si, co]; setSkMove((m) => (m ? { ...m, dx: String(+(triadStart.current[0]! + d[0]! * ux[0]! + d[1]! * uy[0]!).toFixed(3)), dy: String(+(triadStart.current[1]! + d[0]! * ux[1]! + d[1]! * uy[1]!).toFixed(3)) } : m)); } },
       onTurn: (_r, deg, phase) => { if (phase === 'start') { triadStart.current = skMoveNums(); return; } if (phase === 'move') setSkMove((m) => (m ? { ...m, angle: String(+(triadStart.current[2]! + deg).toFixed(3)) } : m)); },
     };
   }, [skMove, activeSketch]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -791,21 +798,38 @@ export function App() {
     return null;
   }, [mode, modTool, facesSel, edgesSel, edgeSets, valueEdit, modBase, modValue, extKind, profiles, snap.sketches, ext.distance, ext.direction, ext.operation, editing, bodyCenter]);
   /** Move: the gizmo on the chosen bodies, at their middle plus the move so far (arrows and squares move them, the rings turn them about a world axis). */
-  const moveTriad = useMemo((): TriadSpec | null => {
-    if (mode !== 'modify' || modTool !== 'move' || valueEdit || !bodiesSel.length) return null;
+  /** The middle of the bodies being moved (the pivot of a turn and where the gizmo stands). */
+  const moveCentre = (): Vec3 | null => {
     const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     for (const b of modBase?.bodies ?? []) if (bodiesSel.includes(b.name)) for (let i = 0; i < b.positions.length; i++) { const k = i % 3; lo[k] = Math.min(lo[k]!, b.positions[i]!); hi[k] = Math.max(hi[k]!, b.positions[i]!); }
-    if (!Number.isFinite(lo[0]!)) return null;
-    const c = lo.map((l, k) => (l + hi[k]!) / 2), shift = [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0];
-    const keys = ['mx', 'my', 'mz'] as const, names = ['X', 'Y', 'Z'] as const;
+    return Number.isFinite(lo[0]!) ? [(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2] : null;
+  };
+  /** While a Move (not a copy) is previewed, the bodies' first places show as an outline so it is clear what moved from where. */
+  const moveGhost = useMemo(() => {
+    if (mode !== 'modify' || modTool !== 'move' || bf.copy || !modBase) return undefined;
+    const changed = [bf.mx, bf.my, bf.mz].some((v) => Number(v) !== 0 && v.trim() !== '') || (bf.rotAxis !== 'none' && Number(bf.rotAngle) !== 0);
+    return changed ? modBase.bodies.filter((b) => bodiesSel.includes(b.name)) : undefined;
+  }, [mode, modTool, bf.copy, bf.mx, bf.my, bf.mz, bf.rotAxis, bf.rotAngle, modBase, bodiesSel]);
+  const moveTriad = useMemo((): TriadSpec | null => {
+    if (mode !== 'modify' || modTool !== 'move' || valueEdit || !bodiesSel.length) return null;
+    const c = moveCentre(); if (!c) return null;
+    const shift = [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0], keys = ['mx', 'my', 'mz'] as const, names = ['X', 'Y', 'Z'] as const;
+    const turn = bf.rotAxis !== 'none' ? Number(bf.rotAngle) || 0 : 0, ax = AXIS_VEC[bf.rotAxis] ?? AXIS_VEC.Z!;
+    const dirs = names.map((n) => (turn ? turnVec(AXIS_VEC[n]!, ax, turn) : AXIS_VEC[n]!)) as Vec3[]; // the body's own axes: they turn with it
     return {
-      origin: [c[0]! + shift[0]!, c[1]! + shift[1]!, c[2]! + shift[2]!],
-      axes: names.map((n, k) => ({ dir: AXIS_VEC[n]!, color: AXIS_COLOR[keys[k]!], label: n })),
-      rings: names.map((n, k) => ({ dir: AXIS_VEC[n]!, color: AXIS_COLOR[keys[k]!], label: n })),
-      onMove: (d, phase) => { if (phase === 'start') { triadStart.current = [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0]; return; } if (phase === 'move') setBf((f) => ({ ...f, mx: String(+(triadStart.current[0]! + d[0]!).toFixed(3)), my: String(+(triadStart.current[1]! + d[1]!).toFixed(3)), mz: String(+(triadStart.current[2]! + d[2]!).toFixed(3)) })); },
+      origin: [c[0] + shift[0]!, c[1] + shift[1]!, c[2] + shift[2]!],
+      axes: names.map((n, k) => ({ dir: dirs[k]!, color: AXIS_COLOR[keys[k]!], label: n })),
+      // each turn handle lies square to its axis and sits toward the next axis round: RX toward +Z, RY toward +X, RZ toward +Y
+      rings: names.map((n, k) => ({ dir: dirs[k]!, anchor: dirs[[2, 0, 1][k]!]!, color: AXIS_COLOR[keys[k]!], label: n })),
+      onMove: (d, phase) => {
+        if (phase === 'start') { triadStart.current = [Number(bf.mx) || 0, Number(bf.my) || 0, Number(bf.mz) || 0]; return; }
+        if (phase !== 'move') return;
+        const w = [0, 1, 2].map((i) => d[0]! * dirs[0]![i]! + d[1]! * dirs[1]![i]! + d[2]! * dirs[2]![i]!); // along the body's own axes, as world numbers
+        setBf((f) => ({ ...f, mx: String(+(triadStart.current[0]! + w[0]!).toFixed(3)), my: String(+(triadStart.current[1]! + w[1]!).toFixed(3)), mz: String(+(triadStart.current[2]! + w[2]!).toFixed(3)) }));
+      },
       onTurn: (r, deg, phase) => { if (phase === 'move') setBf((f) => ({ ...f, rotAxis: names[r]!, rotAngle: String(deg) })); },
     };
-  }, [mode, modTool, valueEdit, bodiesSel, modBase, bf.mx, bf.my, bf.mz]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, modTool, valueEdit, bodiesSel, modBase, bf.mx, bf.my, bf.mz, bf.rotAxis, bf.rotAngle]); // eslint-disable-line react-hooks/exhaustive-deps
   const preview = useRef(false);
   const extrudeStep = (): { command: string; params: Record<string, unknown> } | null => {
     const first = profiles[0]; const d = ext.distance.trim();
@@ -893,7 +917,10 @@ export function App() {
         if (t.some((q) => q === null) || (bf.rotAxis !== 'none' && an === null)) return null;
         const moves = t.some((q) => q !== 0), turns = bf.rotAxis !== 'none' && an !== 0;
         if (!moves && !turns) return null;
-        return { command: 'solid.move', params: { bodies: bodiesSel, copy: bf.copy, ...(moves ? { translate: t } : {}), ...(turns ? { axis: AXIS_VEC[bf.rotAxis], angle: an } : {}) } };
+        // the engine turns about a world axis through the origin and then moves; to turn a body about its own middle, the move also carries the middle back
+        const c = turns ? moveCentre() : null, rc = c ? turnVec(c, AXIS_VEC[bf.rotAxis]!, an!) : null;
+        const tr = turns && c && rc ? [t[0]! + c[0] - rc[0], t[1]! + c[1] - rc[1], t[2]! + c[2] - rc[2]].map((q) => +q.toFixed(6)) : t;
+        return { command: 'solid.move', params: { bodies: bodiesSel, copy: bf.copy, ...(moves || tr.some((q) => q !== 0) ? { translate: tr } : {}), ...(turns ? { axis: AXIS_VEC[bf.rotAxis], angle: an } : {}) } };
       }
       if (modTool === 'split') {
         const at = num(bf.splitPos); if (at === null) return null;
@@ -1626,7 +1653,7 @@ export function App() {
         <Viewport bodies={snap.bodies} sketches={snap.sketches} activeSketch={activeSketch} theme={theme} mode={mode} tool={tool} pending={pending}
           hiddenBodies={hiddenBodies} hiddenSketches={hiddenSketches} showOrigin={showOrigin} constPlanes={snap.planes} hiddenPlanes={hiddenPlanes} planeSheets={planeSheets} hoverPlane={hoverPlane} showGrid={showGrid} showAxes={showAxes} showDims={showDims} onDimEdit={dimEdited} showEdges={showEdges} showProfiles={showProfiles} snap={snapOn}
           selectedFaces={mode === 'modify' ? facesSel : measure ? measure.flatMap((m) => (m.kind === 'face' ? [{ body: m.body, face: m.face }] : [])) : [...(selMore ? [selMore] : []), ...(sel ? [sel] : [])]} pickFaces={mode === 'modify' && (FACE_TOOLS.includes(modTool) || BODY_TOOLS.includes(modTool) || PRIM_TOOLS.includes(modTool) || PLANE_TOOLS.includes(modTool))} selectedBodies={mode === 'modify' ? bodiesSel : mode === 'model' ? bodySel : []} onBodyPick={selectBody} selectedProfiles={profiles}
-          handle={dragHandle} triad={skMoveTriad ?? moveTriad} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setProfiles([]); if (f?.additive && sel) { setSelMore(sel); setSel(f); return; } setSelMore(null); setSel(f); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={skMove ? skMoveOutline : offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
+          handle={dragHandle} triad={skMoveTriad ?? moveTriad} ghost={moveGhost} edgeSets={edgeSets} edgeHighlight={measure ? measure.flatMap((m) => (m.kind === 'edge' ? [{ body: m.body, index: m.index }] : [])) : edgesSel} measuring={measure !== null} onMeasurePick={(it) => setMeasure((cur) => (!cur || cur.length >= 2 ? [it] : [...cur, it]))} markers={measure?.flatMap((m) => (m.kind === 'point' ? [m.at] : []))} onEdgePick={edgePicked} onFacePick={mode === 'modify' ? facePicked : (f) => { setProfiles([]); if (f?.additive && sel) { setSelMore(sel); setSel(f); return; } setSelMore(null); setSel(f); setEdgesSel([]); }} onEntityDrag={entityDrag} onContextAt={(x, y) => setViewMenu({ x, y })} onSketchDrag={sketchDrag} onSketchBox={sketchBox} sizes={sizes} onSizeTyped={(i, text) => setSizes((cur) => { const n = [...cur]; n[i] = text; return n; })} onSizeSubmit={submitTyped} extraPreview={skMove ? skMoveOutline : offsetPick ? offsetOutline : undefined} fillSketches={fillSketches} onPlanePick={planePicked} onSketchClick={sketchClick} onSketchRightClick={endChain}
           pickMode={mode !== 'sketch' ? null : !tool ? 'curve' : isDraw(tool) ? null : PICK_MODE[tool]} highlight={[...selected, ...picks.map((q) => q.id), ...(offsetPick ? [offsetPick] : [])]} showPoints={mode === 'sketch' && !!tool && !isDraw(tool) && PICK_MODE[tool] !== 'curve'}
           onProfilePick={profilePicked} onFaceSnap={faceSnap} onCursor={setCursor} apiRef={viewApi} />
 

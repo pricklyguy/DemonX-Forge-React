@@ -5,12 +5,16 @@ import type { Vec3 } from '../../server/src/engine/Engine';
 export type V2 = [number, number];
 export type Phase = 'start' | 'move' | 'end';
 export interface TriadAxis { dir: Vec3; color: string; label: string }
+export interface TriadRing extends TriadAxis {
+  /** Where the handle sits: a direction square to the axis, from the gizmo's centre, fixed in the object (it turns with the object). */
+  anchor: Vec3;
+}
 export interface TriadSpec {
   origin: Vec3;
   /** The directions the arrows follow (unit vectors, at right angles to each other). */
   axes: TriadAxis[];
   /** The axes a ring turns about (a ring lies square to its axis). */
-  rings?: TriadAxis[];
+  rings?: TriadRing[];
   /** The move so far in mm along each axis (same order as `axes`), measured from where the drag began. */
   onMove(delta: number[], phase: Phase): void;
   /** The turn so far in degrees about `rings[ring]`, right-handed. */

@@ -7,7 +7,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { Body, Sketch, SketchCurve, Vec2, Vec3 } from './api';
 import { loopPolygon, curvePoints } from './sketch/loops';
 import { findRegions } from './sketch/regions';
-import { arrowShape, snapTo, solve2, turnDegrees, len2, type TriadSpec, type V2 } from './triad';
+import { arrowShape, snapTo, solve2, turnDegrees, wrapDeg, len2, type TriadSpec, type V2 } from './triad';
 import { ORIGIN_PLANES, dot as dot3, normalOf, rayToSketch, sub as sub3, toSketch, toWorld, type Plane } from './sketch/plane';
 import { niceStep, round3, snapGrid } from './sketch/snap';
 import { inferSnap, type Inference } from './sketch/inference';
@@ -65,6 +65,8 @@ interface Props {
   handles?: Handle[];
   /** The move / turn gizmo (Move in the model view, Move / Copy in a sketch): arrows, plane squares, a centre dot and rings, drawn over the view at a fixed size. */
   triad?: TriadSpec | null;
+  /** Where bodies were before a Move, drawn as a faint outline while the moved result is previewed (the original stays visible in place). */
+  ghost?: Body[];
   onEdgePick(ref: EdgeRef | null, additive: boolean): void;
   /** The Measure tool is open: a click picks a vertex, an edge or a face (in that order of preference) and is reported here instead of selecting. */
   measuring?: boolean;
@@ -125,6 +127,7 @@ export function Viewport(props: Props) {
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.1));
     const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(200, -300, 400); scene.add(sun);
     const gBodies = new THREE.Group(), gSketch = new THREE.Group(), gPlanes = new THREE.Group(), gGrid = new THREE.Group(), gPreview = new THREE.Group(), gEdges = new THREE.Group(), gHandle = new THREE.Group();
+    const gGhost = new THREE.Group(); scene.add(gGhost);
     scene.add(gBodies, gSketch, gPlanes, gGrid, gPreview, gEdges, gHandle);
     const lineMats = new Set<LineMaterial>();
     // dimension values drawn as small labels over the sketch (plain HTML, moved to follow the camera every frame)
@@ -193,7 +196,7 @@ export function Viewport(props: Props) {
     let lit: { body: string; face: number } | null = null; // the face lit while a sketch plane is being chosen
     const rebuildBodies = () => {
       scene.background = new THREE.Color(css('--canvas'));
-      clear(gBodies); lit = null;
+      clear(gBodies); clear(gGhost); lit = null;
       const p = P.current;
       const base = new THREE.Color(css('--muted')).lerp(new THREE.Color(0xffffff), 0.25), hi = new THREE.Color(css('--accent'));
       for (const b of p.bodies) {
@@ -206,6 +209,14 @@ export function Viewport(props: Props) {
         mesh.userData.body = b;
         if (p.showEdges) mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 })));
         gBodies.add(mesh);
+      }
+      for (const b of p.ghost ?? []) { // the place a moved body came from: a faint fill and its outline
+        const n = b.indices.length, pos = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) { const v = (b.indices[i] ?? 0) * 3; pos[i * 3] = b.positions[v] ?? 0; pos[i * 3 + 1] = b.positions[v + 1] ?? 0; pos[i * 3 + 2] = b.positions[v + 2] ?? 0; }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: css('--accent'), transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }));
+        m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), new THREE.LineBasicMaterial({ color: css('--accent'), transparent: true, opacity: 0.55, depthWrite: false })));
+        gGhost.add(m);
       }
     };
 
@@ -824,17 +835,19 @@ export function Viewport(props: Props) {
     const triadSvg = document.createElementNS(SVGNS, 'svg'); triadSvg.setAttribute('class', 'triadlayer'); el.appendChild(triadSvg);
     const mk = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}, parent: Element = triadSvg) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v)); parent.appendChild(n); return n; };
     type TPart = { kind: 'arrow' | 'plane' | 'center' | 'ring'; i: number; j?: number };
-    let triadShape = '', triadEls: { rings: { g: SVGGElement; hit: SVGPathElement; line: SVGPathElement; discs: SVGCircleElement[] }[]; planes: { poly: SVGPolygonElement; i: number; j: number }[]; arrows: { g: SVGGElement; shaftD: SVGLineElement; shaft: SVGLineElement; cone: SVGPolygonElement; hit: SVGLineElement; text: SVGTextElement; sym: SVGGElement; symMark: SVGElement }[]; center: SVGGElement } | null = null;
-    let triadNow: { o: V2; arrowTip: (V2 | null)[]; planeAt: Record<string, V2>; ringAt: V2[][] } | null = null;
-    const TRIAD_L = 84, TRIAD_R = 104;
+    let triadShape = '', triadEls: { rings: { g: SVGGElement; hit: SVGPathElement; segs: SVGLineElement[]; disc: SVGPolygonElement; dot: SVGCircleElement }[]; planes: { poly: SVGPolygonElement; i: number; j: number }[]; arrows: { g: SVGGElement; shaftD: SVGLineElement; shaft: SVGLineElement; cone: SVGPolygonElement; hit: SVGLineElement; text: SVGTextElement; sym: SVGGElement; symMark: SVGElement }[]; center: SVGGElement } | null = null;
+    let triadNow: { o: V2; arrowTip: (V2 | null)[]; planeAt: Record<string, V2>; ringAt: V2[] } | null = null;
+    const TRIAD_L = 84, TRIAD_R = 118;
     const buildTriad = (T: TriadSpec) => {
       triadSvg.replaceChildren();
       const els: NonNullable<typeof triadEls> = { rings: [], planes: [], arrows: [], center: undefined as unknown as SVGGElement };
       (T.rings ?? []).forEach((r, k) => {
-        const g = mk('g', { class: 'tri-ring', 'data-testid': `triad-ring-${r.label}` }), hit = mk('path', { class: 'tri-hit', fill: 'none', 'stroke-width': 18 }, g), line = mk('path', { class: 'tri-ringline', fill: 'none', stroke: r.color, 'stroke-width': 1.6 }, g);
-        const discs = [0, 1, 2, 3].map(() => mk('circle', { class: 'tri-disc', r: 6.5, stroke: r.color }, g));
-        for (const n of [hit, ...discs]) n.addEventListener('pointerdown', (e) => beginTriad({ kind: 'ring', i: k }, e as PointerEvent));
-        els.rings.push({ g, hit, line, discs });
+        // a turn handle: a short fading arc and a small flat disc on it (the disc lies square to the axis, so it is edge-on from some sides)
+        const g = mk('g', { class: 'tri-ring', 'data-testid': `triad-ring-${r.label}` }), hit = mk('path', { class: 'tri-hit', fill: 'none', 'stroke-width': 20 }, g);
+        const segs = Array.from({ length: 16 }, () => mk('line', { class: 'tri-arcseg', 'stroke-width': 2.4, 'stroke-linecap': 'round' }, g));
+        const disc = mk('polygon', { class: 'tri-disc', stroke: r.color }, g), dot = mk('circle', { class: 'tri-dot', r: 1.8 }, g);
+        for (const n of [hit, disc]) n.addEventListener('pointerdown', (e) => beginTriad({ kind: 'ring', i: k }, e as PointerEvent));
+        els.rings.push({ g, hit, segs, disc, dot });
       });
       for (let i = 0; i < T.axes.length; i++) for (let j = i + 1; j < T.axes.length; j++) {
         const poly = mk('polygon', { class: 'tri-plane', 'data-testid': `triad-plane-${T.axes[i]!.label}${T.axes[j]!.label}` });
@@ -893,17 +906,27 @@ export function Viewport(props: Props) {
         now.planeAt[`${T.axes[i]!.label}${T.axes[j]!.label}`] = c(0.4, 0.4);
       }
       (T.rings ?? []).forEach((r, kk) => {
-        const E = els.rings[kk]!, n = new THREE.Vector3(...r.dir), a = Math.abs(n.z) < 0.9 ? new THREE.Vector3(0, 0, 1).cross(n).normalize() : new THREE.Vector3(1, 0, 0).cross(n).normalize(), b = n.clone().cross(a);
-        const pts: V2[] = []; for (let t = 0; t <= 64; t++) { const th = (t / 64) * Math.PI * 2; pts.push(px(o3.clone().addScaledVector(a, Math.cos(th) * TRIAD_R * wppO).addScaledVector(b, Math.sin(th) * TRIAD_R * wppO))); }
-        const dstr = pts.map((q, ii) => `${ii ? 'L' : 'M'}${pt(q)}`).join(' '); E.line.setAttribute('d', dstr); E.hit.setAttribute('d', dstr);
-        const at: V2[] = []; E.discs.forEach((c, ii) => { const q = pts[ii * 16]!; c.setAttribute('cx', f(q[0])); c.setAttribute('cy', f(q[1])); at.push(q); });
-        now.ringAt.push(at);
-        E.g.classList.toggle('edgeon', Math.abs(n.dot(view)) < 0.12);
+        // the handle's place is worked out from the object's own frame (axis and anchor), so it stays put on the object as the view turns; only the projection changes
+        const E = els.rings[kk]!, n = new THREE.Vector3(...r.dir).normalize(), a = new THREE.Vector3(...r.anchor).normalize(), t = n.clone().cross(a), R3 = TRIAD_R * wppO, rd = 7 * wppO;
+        const at = (phi: number) => px(o3.clone().addScaledVector(a, Math.cos(phi) * R3).addScaledVector(t, Math.sin(phi) * R3));
+        const half = Math.PI / 4, arc: V2[] = []; for (let i = 0; i <= 16; i++) arc.push(at(-half + (i / 16) * 2 * half));
+        E.hit.setAttribute('d', arc.map((q, ii) => `${ii ? 'L' : 'M'}${pt(q)}`).join(' '));
+        E.segs.forEach((sg, ii) => { const p0 = arc[ii]!, p1 = arc[ii + 1]!, mid = (ii + 0.5) / 16; sg.setAttribute('x1', f(p0[0])); sg.setAttribute('y1', f(p0[1])); sg.setAttribute('x2', f(p1[0])); sg.setAttribute('y2', f(p1[1])); sg.setAttribute('stroke-opacity', f(0.15 + 0.85 * Math.sin(mid * Math.PI) ** 1.5)); });
+        const centre = o3.clone().addScaledVector(a, R3), dpts: V2[] = []; for (let i = 0; i < 24; i++) { const th = (i / 24) * Math.PI * 2; dpts.push(px(centre.clone().addScaledVector(a, Math.cos(th) * rd).addScaledVector(t, Math.sin(th) * rd))); }
+        E.disc.setAttribute('points', dpts.map(pt).join(' ')); const cp = at(0); E.dot.setAttribute('cx', f(cp[0])); E.dot.setAttribute('cy', f(cp[1]));
+        now.ringAt.push(cp);
       });
       els.center.setAttribute('transform', `translate(${f(o[0])} ${f(o[1])})`);
       triadNow = now;
     };
-    type TDrag = { part: TPart; m0: V2; o: V2; dirsPx: V2[]; right: THREE.Vector3; up: THREE.Vector3; wppO: number; facing: number; target: Element; id: number };
+    type TDrag = { part: TPart; m0: V2; o: V2; dirsPx: V2[]; right: THREE.Vector3; up: THREE.Vector3; wppO: number; facing: number; target: Element; id: number; plane?: { o3: THREE.Vector3; n: THREE.Vector3; a: THREE.Vector3; t: THREE.Vector3; a0: number | null } };
+    /** The angle of a screen point about the ring's axis, measured on the ring's own plane (null when that plane is seen nearly edge-on). */
+    const ringAngle = (pl: NonNullable<TDrag['plane']>, m: V2): number | null => {
+      const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2((m[0] / size.x) * 2 - 1, 1 - (m[1] / size.y) * 2), cam);
+      const dir = rc.ray.direction, den = pl.n.dot(dir); if (Math.abs(den) < 0.2) return null;
+      const hit = rc.ray.origin.clone().addScaledVector(dir, pl.n.dot(pl.o3.clone().sub(rc.ray.origin)) / den).sub(pl.o3);
+      return Math.atan2(hit.dot(pl.t), hit.dot(pl.a));
+    };
     let triadDrag: TDrag | null = null;
     const beginTriad = (part: TPart, e: PointerEvent) => {
       const T = P.current.triad; if (!T || e.button !== 0) return;
@@ -912,8 +935,11 @@ export function Viewport(props: Props) {
       const px = (v: THREE.Vector3): V2 => { const q = v.clone().project(cam); return [((q.x + 1) / 2) * size.x, ((1 - q.y) / 2) * size.y]; };
       const o = px(o3), k = wppO * 60, dirsPx = T.axes.map((a) => { const q = px(o3.clone().addScaledVector(new THREE.Vector3(...a.dir), k)); return [(q[0] - o[0]) / k, (q[1] - o[1]) / k] as V2; }); // pixels per mm along each axis
       const camRight = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0), camUp = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
-      const ringDir = part.kind === 'ring' ? new THREE.Vector3(...T.rings![part.i]!.dir) : null;
-      triadDrag = { part, m0: [e.clientX - r.left, e.clientY - r.top], o, dirsPx, right: camRight, up: camUp, wppO, facing: ringDir ? ringDir.dot(cam.position.clone().sub(o3)) : 1, target: e.currentTarget as Element, id: e.pointerId };
+      const ringDir = part.kind === 'ring' ? new THREE.Vector3(...T.rings![part.i]!.dir).normalize() : null;
+      const m0: V2 = [e.clientX - r.left, e.clientY - r.top];
+      let plane: TDrag['plane'];
+      if (part.kind === 'ring' && ringDir) { const a = new THREE.Vector3(...T.rings![part.i]!.anchor).normalize(); plane = { o3, n: ringDir, a, t: ringDir.clone().cross(a), a0: null }; plane.a0 = ringAngle(plane, m0); }
+      triadDrag = { plane,  part, m0, o, dirsPx, right: camRight, up: camUp, wppO, facing: ringDir ? ringDir.dot(cam.position.clone().sub(o3)) : 1, target: e.currentTarget as Element, id: e.pointerId };
       (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
       if (part.kind === 'ring') T.onTurn?.(part.i, 0, 'start'); else T.onMove(T.axes.map(() => 0), 'start');
       window.addEventListener('pointermove', moveTriad); window.addEventListener('pointerup', endTriad); window.addEventListener('pointercancel', endTriad);
@@ -921,7 +947,10 @@ export function Viewport(props: Props) {
     const triadDelta = (e: PointerEvent) => {
       const T = P.current.triad, d = triadDrag; if (!T || !d) return null;
       const r = dom.getBoundingClientRect(), m: V2 = [e.clientX - r.left, e.clientY - r.top], dm: V2 = [m[0] - d.m0[0], m[1] - d.m0[1]], step = (T.step ?? 0.5) * (e.shiftKey ? 0.1 : 1);
-      if (d.part.kind === 'ring') return { turn: snapTo(turnDegrees(d.o, d.m0, m, d.facing), (T.angleStep ?? 15) * (e.shiftKey ? 1 / 15 : 1)) };
+      if (d.part.kind === 'ring') {
+        const a1 = d.plane ? ringAngle(d.plane, m) : null, raw = d.plane && a1 !== null && d.plane.a0 !== null ? wrapDeg(((a1 - d.plane.a0) * 180) / Math.PI) : turnDegrees(d.o, d.m0, m, d.facing);
+        return { turn: snapTo(raw, (T.angleStep ?? 15) * (e.shiftKey ? 1 / 15 : 1)) };
+      }
       const out = T.axes.map(() => 0);
       const inPlane = (i: number, j: number) => { const ab = solve2(d.dirsPx[i]!, d.dirsPx[j]!, dm); if (ab) { out[i] = snapTo(ab[0], step); out[j] = snapTo(ab[1], step); } };
       if (d.part.kind === 'arrow') { const u = d.dirsPx[d.part.i]!, l = len2(u); if (l > 0.2) out[d.part.i] = snapTo((dm[0] * u[0] + dm[1] * u[1]) / (l * l), step); }
@@ -943,7 +972,7 @@ export function Viewport(props: Props) {
     (window as any).__forgeTriad = () => {
       if (!triadNow) return null;
       const r = dom.getBoundingClientRect(), sh = (q: V2 | null): V2 | null => (q ? [q[0] + r.left, q[1] + r.top] : null), n = triadNow;
-      return { o: sh(n.o), arrowTip: n.arrowTip.map(sh), planeAt: Object.fromEntries(Object.entries(n.planeAt).map(([k, v]) => [k, sh(v)])), ringAt: n.ringAt.map((a) => a.map(sh)) };
+      return { o: sh(n.o), arrowTip: n.arrowTip.map(sh), planeAt: Object.fromEntries(Object.entries(n.planeAt).map(([k, v]) => [k, sh(v)])), ringAt: n.ringAt.map(sh) };
     };
     let raf = 0, firstFit = false;
     const loop = () => {
@@ -981,7 +1010,7 @@ export function Viewport(props: Props) {
   }, []);
 
   const p = props;
-  useEffect(() => { S.current?.rebuild('bodies'); (S.current as any)?.fitOnce?.(); }, [p.bodies, p.hiddenBodies, p.selectedFaces, p.selectedBodies, p.showEdges, p.theme, p.mode === 'pickPlane']);
+  useEffect(() => { S.current?.rebuild('bodies'); (S.current as any)?.fitOnce?.(); }, [p.bodies, p.ghost, p.hiddenBodies, p.selectedFaces, p.selectedBodies, p.showEdges, p.theme, p.mode === 'pickPlane']);
   useEffect(() => { S.current?.rebuild('sketches'); }, [p.sketches, p.hiddenSketches, p.mode, p.tool, p.showProfiles, p.selectedProfiles, p.theme, p.showDims]);
   useEffect(() => { S.current?.rebuild('planes'); }, [p.mode, p.showOrigin, p.bodies, p.theme, p.constPlanes, p.hiddenPlanes, p.planeSheets, p.hoverPlane]);
   useEffect(() => { S.current?.rebuild('preview'); }, [p.pending, p.tool, p.mode, p.activeSketch, p.pickMode, p.highlight, p.showPoints, p.extraPreview, p.sizes?.join('|')]);

@@ -42,7 +42,7 @@ await p.getByLabel('Copy').check();
 check(await waitTrue(async () => await same([ONE, '50,0,0,90,30,10'])), 'Copy keeps the original and adds a moved copy', JSON.stringify(await boxes()));
 await p.getByLabel('Copy').uncheck(); await p.getByLabel('Move X', { exact: true }).fill('0');
 await p.getByLabel('Turn about').selectOption('Z'); await p.getByLabel('Turn angle').fill('90');
-check(await waitTrue(async () => await same(['-30,0,0,0,40,10'])), 'a 90 degree turn about Z (through the origin)', JSON.stringify(await boxes()));
+check(await waitTrue(async () => await same(['5,-5,0,35,35,10'])), 'a 90 degree turn about Z, about the middle of the body (it stays centred on 20, 15)', JSON.stringify(await boxes()));
 await p.getByLabel('Turn angle').fill('0');
 await settle(1500);
 check(await same([ONE]), 'a move of nothing is not accepted: the preview goes away');

@@ -218,11 +218,11 @@ header button.docname:hover:not(:disabled), header button.docname:focus-visible 
 .triadlayer .tri-dot { fill: #14130f; pointer-events: none; }
 .triadlayer .tri-label { font-size: 12px; font-weight: 700; paint-order: stroke; stroke: #14130f; stroke-width: 3px; pointer-events: none; user-select: none; }
 .triadlayer .tri-plane { fill: rgba(244, 244, 240, 0.9); stroke: #14130f; stroke-width: 1.4; cursor: grab; }
-.triadlayer .tri-ringline { opacity: 0.55; pointer-events: none; }
+.triadlayer .tri-arcseg { stroke: #f4f4f0; pointer-events: none; }
 .triadlayer .tri-disc { fill: #f4f4f0; stroke-width: 2; cursor: grab; pointer-events: all; }
-.triadlayer .tri-ring.edgeon .tri-hit { pointer-events: none; }
 .triadlayer .tri-arrow:not(.endon) .tri-sym, .triadlayer .tri-arrow.endon .tri-dark, .triadlayer .tri-arrow.endon .tri-light, .triadlayer .tri-arrow.endon > polygon.tri-cone { display: none; }
 .triadlayer .tri-arrow:hover .tri-light, .triadlayer .tri-arrow:hover .tri-cone, .triadlayer .tri-plane:hover { fill: var(--amber); }
 .triadlayer .tri-arrow:hover .tri-light { stroke: var(--amber); }
-.triadlayer .tri-disc:hover, .triadlayer .tri-center:hover .tri-cone { fill: var(--amber); }
+.triadlayer .tri-disc:hover, .triadlayer .tri-center:hover .tri-cone { fill: var(--accent); }
+.triadlayer .tri-ring:hover .tri-arcseg { stroke: var(--accent); }
 .triadlayer .tri-center { cursor: grab; pointer-events: all; }
