@@ -50,7 +50,7 @@ It shares the look and feel of DemonX CNC and DemonX Design (the same slate and 
 **Install as an app.** In Chrome or Edge, File > Install Forge as an app… gives Forge its own window and taskbar icon without tabs or an address bar. (Forge's server still has to be running.)
 
 **Mouse and keys**
-- Wheel zooms toward the pointer; middle-drag pans; Shift + middle-drag orbits; the cube at the top right and the buttons under the view jump to standard views. `?` lists every key.
+- Wheel zooms toward the pointer; middle-drag pans; Shift + middle-drag orbits; the cube at the top right jumps to a standard view when you click a face, its arrows turn the view a quarter turn (the curved ones roll it), and the buttons under the view fit it or show the home view. `?` lists every key.
 - Z is up. Lengths are millimetres and angles are degrees everywhere.
 
 ## Install (Windows)

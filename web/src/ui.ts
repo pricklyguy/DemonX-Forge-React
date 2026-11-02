@@ -13,6 +13,8 @@ export interface ViewApi {
   focusSize(i: number, first?: string): boolean;
   fit(): void;
   setView(name: 'home' | 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right'): void;
+  /** Turn the view a quarter turn, as the arrows round the cube do: the model turns the way the arrow points; the curved arrows roll it about the line of sight. */
+  turn(kind: 'left' | 'right' | 'up' | 'down' | 'rollCW' | 'rollCCW'): void;
   /** Camera orientation as a row-major 3x3 world-to-camera rotation. */
   rotation(): number[];
   /** A small picture of the model as it is drawn now (for the Start page), or null when there is nothing to draw. */

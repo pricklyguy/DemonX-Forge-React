@@ -33,6 +33,8 @@ export function ViewCube({ api, onHome }: { api: MutableRefObject<ViewApi | null
         {FACES.map((f) => <div key={f.name} className="vcface" data-face={f.name} style={{ transform: face3d(f) }} onClick={() => api.current?.setView(f.name)}>{f.label}</div>)}
       </div></div>
       <button className="vchome" title="Home view" aria-label="Home view" onClick={onHome}>⌂</button>
+      {([['up', '▲', 'vcarrow up', 'Turn the view up'], ['down', '▼', 'vcarrow down', 'Turn the view down'], ['left', '◀', 'vcarrow left', 'Turn the view left'], ['right', '▶', 'vcarrow right', 'Turn the view right'], ['rollCW', '↻', 'vcroll cw', 'Roll clockwise'], ['rollCCW', '↺', 'vcroll ccw', 'Roll anticlockwise']] as const).map(([k, g, cls, tip]) =>
+        <button key={k} className={cls} data-testid={`vc-${k}`} title={tip} aria-label={tip} onClick={() => api.current?.turn(k)}>{g}</button>)}
     </div>
   );
 }

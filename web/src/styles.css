@@ -48,7 +48,7 @@ input[type='text']:focus, select:focus { outline: 1px solid var(--accent); }
 .stage { position: relative; min-width: 0; min-height: 0; grid-row: 3; grid-column: 2; }
 .viewport { position: absolute; inset: 0; } .viewport canvas { display: block; width: 100%; height: 100%; }
 .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; } .empty > div { pointer-events: auto; }
-.viewcube { position: absolute; top: 14px; right: 18px; width: 96px; height: 96px; display: grid; place-items: center; }
+.viewcube { position: absolute; top: 10px; right: 12px; width: 120px; height: 120px; display: grid; place-items: center; }
 .vcscene { width: 54px; height: 54px; perspective: 400px; } .vccube { position: relative; width: 54px; height: 54px; transform-style: preserve-3d; }
 .vcface { position: absolute; left: 0; top: 0; width: 54px; height: 54px; display: grid; place-items: center; font-size: 9px; letter-spacing: .05em; color: var(--text); background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--line); cursor: pointer; backface-visibility: hidden; margin: -27px 0 0 -27px; left: 50%; top: 50%; }
 .vcface:hover { background: var(--accent); color: var(--accent-text); }
@@ -226,3 +226,9 @@ header button.docname:hover:not(:disabled), header button.docname:focus-visible 
 .triadlayer .tri-disc:hover, .triadlayer .tri-center:hover .tri-cone { fill: var(--accent); }
 .triadlayer .tri-ring:hover .tri-arcseg { stroke: var(--accent); }
 .triadlayer .tri-center { cursor: grab; pointer-events: all; }
+
+/* the arrows round the view cube: a quarter turn of the view, and two rolls */
+.vcarrow, .vcroll { position: absolute; padding: 0; width: 22px; height: 22px; display: grid; place-items: center; background: none; border: 0; color: var(--muted); font-size: 11px; line-height: 1; cursor: pointer; }
+.vcarrow:hover, .vcroll:hover { color: var(--accent); }
+.vcarrow.up { top: 0; left: 49px; } .vcarrow.down { bottom: 0; left: 49px; } .vcarrow.left { left: 0; top: 49px; } .vcarrow.right { right: 0; top: 49px; }
+.vcroll { font-size: 17px; } .vcroll.cw { top: 0; right: 0; } .vcroll.ccw { bottom: 0; right: 0; }

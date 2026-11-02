@@ -597,6 +597,22 @@ export function Viewport(props: Props) {
       const dist = cam.position.distanceTo(ctl.target);
       cam.position.copy(ctl.target).add(d.multiplyScalar(dist)); ctl.update(); fit();
     };
+    /** A quarter turn of the view in 12 small steps. The model turns the way the arrow points (the camera goes the other way round the target); a roll turns the view about the line of sight. */
+    let turning = 0;
+    const turnView = (kind: 'left' | 'right' | 'up' | 'down' | 'rollCW' | 'rollCCW') => {
+      if (turning) return;
+      const cx = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).normalize(), cy = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).normalize(), cz = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 2).normalize();
+      const axis = kind === 'left' || kind === 'right' ? cy : kind === 'up' || kind === 'down' ? cx : cz, sign = { right: -1, left: 1, up: 1, down: -1, rollCW: 1, rollCCW: -1 }[kind], rolling = kind === 'rollCW' || kind === 'rollCCW';
+      const N = 12, step = new THREE.Quaternion().setFromAxisAngle(axis, (sign * Math.PI) / 2 / N);
+      let i = 0;
+      const frame = () => {
+        const off = cam.position.clone().sub(ctl.target);
+        if (!rolling) off.applyQuaternion(step);
+        cam.position.copy(ctl.target).add(off); cam.up.copy(cam.up.clone().applyQuaternion(step).normalize()); makeControls(); cam.lookAt(ctl.target);
+        if (++i < N) turning = requestAnimationFrame(frame); else turning = 0;
+      };
+      turning = requestAnimationFrame(frame);
+    };
     const lookAtSketch = (s: Sketch) => {
       const pl = planeOf(s), n = v3(normalOf(pl)).normalize();
       setUp(v3(pl.yDir));
@@ -604,6 +620,7 @@ export function Viewport(props: Props) {
       ctl.target.copy(v3(pl.origin)); cam.position.copy(v3(pl.origin)).add(n.multiplyScalar(dist)); ctl.update();
     };
     P.current.apiRef.current = { focusSize: (i: number, first?: string) => { const x = liveInputs[i]; if (!x) return false; x.focus(); if (first !== undefined) { x.value = first; P.current.onSizeTyped?.(i, first); } else x.select(); return true; }, fit, setView: (n) => setView(n), thumbnail: () => { if (!gBodies.children.length) return null; try { renderer.render(scene, cam); const w = 192, h = 120, c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); if (!g) return null; g.fillStyle = css('--canvas'); g.fillRect(0, 0, w, h); const sw = dom.width, sh = dom.height, k = Math.max(w / sw, h / sh); g.drawImage(dom, (sw - w / k) / 2, (sh - h / k) / 2, w / k, h / k, 0, 0, w, h); return c.toDataURL('image/jpeg', 0.72); } catch { return null; } },
+      turn: turnView,
       rotation: () => { const m = cam.matrixWorldInverse.elements; return [m[0]!, m[4]!, m[8]!, m[1]!, m[5]!, m[9]!, m[2]!, m[6]!, m[10]!]; } };
 
     // ---- picking and pointer handling
@@ -1050,6 +1067,7 @@ export function Viewport(props: Props) {
       litFace: () => lit,
       up: () => cam.up.toArray(),
       // for the browser checks: the box of every body as drawn (a Move's preview included), 'x0,y0,z0,x1,y1,z1' rounded to the millimetre
+      camDir: () => { const d = cam.position.clone().sub(ctl.target).normalize(); return [d.x, d.y, d.z].map((v) => Math.round(v * 100) / 100); },
       viewBoxes: () => [...gBodies.children, ...gMove.children].map((o) => { o.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(o); return [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].map((v) => Math.round(v)).join(','); }),
       project: (w: number[]) => { const v = new THREE.Vector3(w[0], w[1], w[2]).project(cam); const r = dom.getBoundingClientRect(); return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height]; },
       sketchToScreen: (q: Vec2) => { const s = P.current.activeSketch; if (!s) return null; const w = toWorld(planeOf(s), q); return (window as any).__forge.project(w); },

@@ -42,6 +42,7 @@ Each script says in its header how to run it. They need the real engine, a built
 | `infobar.mjs` | The bottom information bar (face area, edge length, distance between two faces, sketch line) and the Front plane opening seen from the front (needs a fresh server) |
 | `triad.mjs` | The move / turn gizmo in a sketch and on a body: arrows, the square between them, the centre dot, the turn handles, the gizmo turning with the body (needs a fresh server) |
 | `bodybox.mjs` | A left drag in the model view selects bodies (window and crossing, Shift adds) and Move previews in the view with no engine change until OK (needs a fresh server) |
+| `viewcube.mjs` | The arrows round the view cube: four quarter turns and two rolls (needs a fresh server) |
 | `snap.mjs` | the face under the pointer lights up when choosing a sketch plane; Extrude and Press Pull reach another face's height by clicking it (needs a fresh server) |
 | `strip.mjs` | a strip sketched along a face's edge (lines on top of the face outline): two shapes, clicking the strip, extruding it; orbiting past the top view (needs a fresh server) |
 | `usability.mjs` | E on a body face (Press Pull), the compact Move / Copy dialog (typing, step buttons, arrows, Copy, undo), the ribbon in a 1000 px window, the right-click Modify section, snap hints (end, middle, crossing, alignment) and the rubber band (needs a fresh server) |
